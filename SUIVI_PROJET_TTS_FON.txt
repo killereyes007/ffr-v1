@@ -1,0 +1,478 @@
+SUIVI DU PROJET : ASSISTANT VOCAL EN FON
+========================================
+
+Derniere mise a jour : 4 novembre 2026 (reconception culturelle du jeu pilote)
+Objectif general : construire a terme un assistant qui comprend le fon et peut
+repondre oralement en fon.
+
+Ce fichier est le journal de reference du projet. Il doit etre actualise lors
+des prochaines modifications importantes : nouveaux corpus, changements de
+code, entrainements, resultats, decisions ou limites decouvertes.
+
+
+1. OBJECTIF ET ETAT GENERAL
+--------------------------
+
+L'objectif est plus large que la seule synthese vocale : un assistant complet
+devra comprendre les demandes, produire une reponse en fon et la dire a voix
+haute. A ce jour, le travail porte principalement sur la synthese vocale
+texte-vers-audio (TTS), en reutilisant le modele existant facebook/mms-tts-fon.
+
+Etat actuel :
+- La synthese du texte en fon fonctionne dans une petite interface locale ;
+  le modele MMS adapte sur Colab est maintenant disponible et une inference
+  locale de controle a reussi.
+- Un jeu de donnees de locuteur adulte autorise a ete controle et separe en
+  entrainement et validation, sans melanger les phrases repetees.
+- Huit exemples de validation ont une reference audio generee par le modele
+  original.
+- Un paquet portable et un notebook Colab avec GPU ont ete prepares et le
+  modele adapte a ete telecharge.
+- Un prototype de pipeline texte utilise OpenRouter pour repondre en francais,
+  traduit la reponse en fon et la prononce avec le modele TTS local.
+- Le modele de langage n'est pas lui-meme entraine pour comprendre/rediger en
+  fon ; la comprehension du fon passe pour l'instant par transcription puis
+  traduction vers le francais. Une premiere reconnaissance vocale locale
+  francais/fon est integree, mais sa precision en fon reste a evaluer.
+
+
+2. CORPUS ET SOURCES DE DONNEES
+-------------------------------
+
+2.1 Corpus FFR
+
+- Dossier : FFR-Dataset (issu du dossier de travail ffr-v1-master).
+- Corpus parallele Fon-francais avec environ 53 975 paires dans la version
+  principale examinee.
+- Le depot contient aussi du code de traduction ancien, des resultats et des
+  informations de licence.
+- Les fichiers et splits doivent etre reexamines avant toute fusion ou nouvel
+  entrainement.
+
+2.2 MAFAND francais-Fon
+
+- Fichiers dans FFR-Dataset/external/MAFAND-fr-fon/.
+- Train : 2 637 paires.
+- Validation/dev : 1 227 paires.
+- Test : 1 579 paires.
+- Les donnees sont du domaine de l'actualite et sont alignees francais-Fon.
+- Elles peuvent aider pour la traduction, mais ne constituent pas a elles
+  seules un corpus de conversations en fon.
+- Licence indiquee par la fiche source : CC BY-NC 4.0.
+- Garder le test a l'ecart de l'entrainement.
+
+2.3 FineWeb-2 Fon_Latn
+
+- Fichiers dans FFR-Dataset/external/FineWeb-2-fon_Latn/.
+- Train : 1 639 documents.
+- Test : 11 documents.
+- Textes web non alignes, avec metadonnees de source et score d'identification
+  linguistique. Qualite/bruit a controler avant emploi.
+- Licence indiquee par la fiche source : ODC-By.
+- Garder le split test a l'ecart de l'entrainement.
+
+2.4 Fongbe Speech Dataset
+
+- Dossier : Fongbe_Speech_Dataset/.
+- Le manifeste et les fichiers disponibles contiennent 3 179 enregistrements.
+- Le document descriptif annonce 3 979 enregistrements : cet ecart de 800
+  enregistrements n'est pas resolu et doit rester signale.
+- Les paires effectivement referencees dans le manifeste ont ete controlees :
+  fichiers presents, WAV lisibles, mono, 16 kHz, PCM 16 bits.
+- Le suffixe « for_validation » des noms de fichiers correspond a une
+  validation humaine des enregistrements selon la documentation, et ne prouve
+  pas que le corpus avait un split train/test d'apprentissage.
+- Ne pas supposer que le corpus entier peut servir a entrainer une voix
+  synthetique sans consentement approprie. L'essai courant est restreint au
+  locuteur adulte 4, dont l'autorisation pour l'entrainement TTS et la
+  generation de parole synthetique a ete confirmee par l'operateur.
+
+Documentation des sources externes :
+FFR-Dataset/external/README.md
+
+
+3. MODELE ET DEMONSTRATEUR TTS
+------------------------------
+
+- Modele utilise : facebook/mms-tts-fon, architecture VITS, frequence de sortie
+  de 16 kHz.
+- La synthese du fon fonctionne avec le modele existant ; l'interface locale
+  permet de saisir du texte et d'ecouter l'audio genere.
+- La licence du modele est CC BY-NC 4.0, avec restriction non commerciale.
+  Verifier les conditions applicables avant tout usage ou partage.
+- La qualite de prononciation doit etre evaluee par des locuteurs du fon.
+
+Fichiers principaux :
+- tts_demo/app.py : interface locale de synthese.
+- tts_demo/requirements.txt : dependances de la demo.
+- tts_demo/README.md : instructions d'utilisation, preparation et comparaison.
+
+Environnement local releve lors des essais precedents :
+- macOS, Python 3.9.6, PyTorch 2.8.0, Transformers 4.57.6, Gradio 4.44.1.
+- Apple MPS disponible ; CUDA indisponible sur cette machine.
+- 8 Gio de RAM systeme et environ 1 Gio libre lors du controle.
+- La demo utilise CUDA ou MPS si disponible, sinon le CPU.
+
+
+4. PREPARATION DES DONNEES DU LOCUTEUR 4
+----------------------------------------
+
+Consentement et perimetre :
+- Locuteur adulte de 24 ans.
+- L'operateur a confirme l'autorisation pour l'entrainement TTS et la
+  generation avec cette voix.
+- L'operateur a aussi confirme le transfert temporaire des fichiers vers
+  Google Colab/Drive dans le cadre de cet essai.
+- Le consentement original doit etre conserve separement.
+- Les autres locuteurs, notamment les mineurs, ne sont pas inclus dans le
+  paquet Colab de cette experience.
+
+Controle et split :
+- 672 clips controles, pour 1,561 heure d'audio au total.
+- Audio mono, 16 kHz, PCM 16 bits ; aucun fichier manquant ou illisible et
+  aucune transcription vide dans les enregistrements retenus.
+- 567 groupes de transcriptions distinctes ; 105 enregistrements sont des
+  repetitions supplementaires.
+- Train : 610 clips, 510 transcriptions uniques, environ 1,401 heure.
+- Validation : 62 clips, 57 transcriptions uniques, environ 0,159 heure.
+- Aucun groupe de transcription partage entre train et validation.
+- Separation deterministe, graine 42, groupe par texte normalise NFC,
+  insensible a la casse et aux espaces multiples.
+- Aucune transcription de ce locuteur n'a produit de token inconnu pour le
+  tokenizer MMS lors du controle.
+
+Fichiers :
+- tts_demo/prepare_speaker_dataset.py : controle des paires et creation du split.
+- tts_demo/experiments/speaker_4/train.csv
+- tts_demo/experiments/speaker_4/validation.csv
+- tts_demo/experiments/speaker_4/quality_report.json
+
+
+5. ESSAI DE REFERENCE ET ETAT D'ENTRAINEMENT
+--------------------------------------------
+
+- Une tentative d'entrainement local via Transformers VitsModel a ete faite.
+- Elle a echoue explicitement : « Training of VITS is not supported yet. »
+- Aucun checkpoint adapte n'a ete cree pendant cette tentative.
+- L'adaptation doit utiliser un pipeline VITS/MMS distinct de l'API
+  d'inference Transformers.
+- Huit audios de reference du modele original ont ete generes sur huit phrases
+  du split de validation. Ils sont conserves avec leurs references reelles
+  dans tts_demo/experiments/speaker_4/comparison/.
+- Le fine-tuner communautaire considere est
+  ylacombe/finetune-hf-vits, au commit
+  6f3f51f4d667f5c3eef89484d151ffd39d2c2b89 (fevrier 2024).
+- Ce pipeline requiert un checkpoint MMS auquel le discriminateur a ete ajoute.
+  La conversion pour Fon est prevue dans le notebook. Le depot communautaire
+  n'a pas encore ete execute pour cette experience.
+- Tout modele adapte reste soumis aux conditions de la licence du modele de
+  base, notamment CC BY-NC 4.0.
+
+Fichiers :
+- tts_demo/compare_models.py : generation comparee sur les memes phrases.
+- tts_demo/experiments/speaker_4/comparison/comparison.json : manifeste des
+  huit phrases de reference.
+- tts_demo/experiments/speaker_4/adaptation_status.json : enregistre l'echec
+  de la tentative locale et l'absence de checkpoint.
+
+
+6. PAQUET PORTABLE ET NOTEBOOK GOOGLE COLAB
+-------------------------------------------
+
+Fichiers prepares le 29 octobre 2026 :
+
+- Paquet : tts_demo/experiments/speaker_4/speaker_4_colab_bundle.zip
+  Taille verifiee : environ 132,9 Mio.
+  Contenu verifie : 610 paires train, 62 paires validation, huit audios MMS
+  originaux, chemins relatifs et aucun chevauchement de transcriptions.
+  Le paquet ne contient pas les autres locuteurs ni les metadonnees completes
+  du corpus.
+
+- Notebook : tts_demo/colab_fon_tts_pilot.ipynb
+  Il demande un runtime GPU, monte Drive, verifie le contenu et le format des
+  fichiers, prepare un jeu de donnees local, utilise le fine-tuner au commit
+  fixe, convertit le checkpoint du discriminateur et lance un pilote limite a
+  64 exemples train, 16 exemples eval et une epoque.
+  Le notebook ne publie pas les audios ou le modele sur Hugging Face.
+  Il compare les huit phrases : enregistrement de validation, modele original
+  et modele adapte, puis copie les resultats dans Drive.
+
+- Creation du paquet : tts_demo/package_speaker_dataset.py
+- Instructions : tts_demo/README.md
+
+Avant le lancement :
+1. Televerser speaker_4_colab_bundle.zip dans Mon Drive/fon_tts/ avec le nom
+   attendu par le notebook.
+2. Ouvrir le notebook dans Google Colab.
+3. Choisir un runtime GPU CUDA.
+4. Executer les cellules dans l'ordre et autoriser l'acces a Drive.
+
+Le pilote constitue d'abord un test technique du pipeline. Avec seulement
+64 exemples et une epoque, il ne permet pas de conclure que la voix est
+meilleure. Faire evaluer le naturel et la prononciation par des locuteurs du
+fon avant d'augmenter l'entrainement.
+
+Verification locale realisee apres preparation :
+- Archive ouverte et controlee.
+- 610 exemples train, 62 validation et 8 exemples de comparaison trouves.
+- Chemins des audios et references presents dans l'archive.
+- Aucun chevauchement entre les groupes de transcriptions.
+- JSON du notebook valide et cellules Python analysables syntaxiquement.
+- Ces validations ne remplacent pas une execution reelle sur Colab.
+
+
+7. DECISIONS ET PRECAUTIONS
+---------------------------
+
+- Reutiliser et adapter d'abord le modele MMS Fon existant plutot que de
+  construire une synthese vocale a partir de zero.
+- Garder les sources distinctes et respecter leurs splits et licences.
+- Ne jamais envoyer les enregistrements ou checkpoint sur un Hub sans nouvel
+  accord explicite.
+- Conserver les audios et checkpoints de voix dans un espace prive ; supprimer
+  les copies temporaires lorsqu'elles ne sont plus necessaires.
+- Le paquet Colab et le checkpoint issu de cette voix sont des donnees privees
+  et sensibles car ils portent sur une voix identifiable.
+- Le corpus de parole ne remplace pas un modele conversationnel : la
+  comprehension et la generation de reponses en fon passent encore par la
+  traduction et OpenRouter. La precision ASR en fon et le naturel TTS doivent
+  etre evalues par des locuteurs.
+- Le jeu pilote est une fiction web en trois missions, « Le carnet des voix ».
+  Les missions contemporaines portent sur des phrases du quotidien en fon ; un
+  carnet facultatif presente six reperes historiques et culturels sources, des
+  societes precoloniales a la Republique du Benin contemporaine. Aucune traduction n'est
+  automatiquement jugee correcte ; les propositions restent non verifiees.
+
+
+8. PROCHAINES ETAPES
+--------------------
+
+1. Tester l'entree micro en francais puis en fon ; corriger les transcriptions
+   avec des locuteurs et consigner les erreurs de reconnaissance.
+2. Evaluer le naturel et la prononciation du modele TTS adapte avec des
+   locuteurs du fon.
+3. Selon les resultats, constituer une evaluation ASR reproductible sur le
+   corpus existant et decider si un ajustement specifique au fon est necessaire.
+4. Ameliorer ensuite la comprehension et la generation conversationnelle en
+   fon, qui passent encore par la traduction vers le francais.
+
+
+9. JOURNAL DES MISES A JOUR
+---------------------------
+
+29 octobre 2026 — prototype local de l'assistant texte
+- L'utilisateur a valide une architecture a plusieurs couches avec reponse
+  toujours en fon : entree audio a terme, reconnaissance/transcription,
+  traduction vers le francais si l'entree est en fon, LLM via OpenRouter,
+  traduction de la reponse vers le fon, puis synthese vocale.
+- Ajout de `tts_demo/assistant_pipeline.py` : client OpenRouter par API HTTP,
+  traduction Fon->francais si necessaire, reponse LLM en francais, traduction
+  francais->fon et historique limite aux cinq derniers tours.
+- Ajout de `tts_demo/assistant_app.py` : prototype Gradio texte qui accepte
+  une entree francaise ou fon, affiche le brouillon francais et la reponse en
+  fon, puis produit l'audio en fon sur le port 7861 (la demo TTS existante
+  garde le port 7860). La reconnaissance audio entrante n'est pas encore
+  implementee.
+- La cle est lue depuis `OPENROUTER_API_KEY`; le modele est configurable par
+  `OPENROUTER_MODEL`. Les requetes textuelles et l'historique sont transmis a
+  OpenRouter; ne pas saisir de donnees sensibles.
+- `tts_demo/app.py` detecte automatiquement le checkpoint adapte telecharge
+  dans `models/inference_model-speaker4-20261029`, ou accepte un chemin
+  explicite dans `FON_TTS_MODEL`.
+- Ajout de tests unitaires dans `tts_demo/tests/`. Les six tests passent avec
+  Python 3.9 ; compilation Python et import smoke-test de l'interface Gradio
+  reussis.
+- Limites : aucune reconnaissance audio (ASR), aucune garantie de traduction
+  naturelle en fon ; le modele ne comprend pas nativement le fon. La cle
+  OpenRouter exposee dans le chat doit etre revoquee et remplacee.
+- Pour simplifier la configuration OpenRouter, ajout du chargement local
+  facultatif de `tts_demo/.env`, de `.env.example` sans secret et d'un
+  `.gitignore` excluant `.env`. Les variables deja exportees gardent la
+  priorite. Ne jamais reutiliser la cle exposee dans le chat : la revoquer et
+  en generer une nouvelle avant de la saisir dans `.env`.
+
+29 octobre 2026
+- Le ZIP `inference_model-20261029T225159Z-1-001.zip` a ete inspecte et extrait
+  sans ecraser de fichiers dans `tts_demo/models/inference_model-speaker4-20261029`.
+- Configuration VITS, frequence 16 kHz, un locuteur, fichiers de poids et
+  tokenizer presents. Une inference locale a genere 6 912 echantillons audio
+  a 16 kHz pour une phrase de test.
+- La demo selectionne le checkpoint local adapte par defaut et la description
+  montre le modele reellement charge. Redemarrer les serveurs locaux apres
+  cette modification pour qu'ils chargent le nouveau modele.
+- Attention aux secrets : `.env.example` contenait une vraie cle par copie
+  accidentelle du fichier local. L'exemple a ete remplace par un placeholder.
+  La cle partagee dans le chat est compromise et doit etre revoquee.
+- Les journaux du serveur ont localise une erreur de reponse vide au dernier
+  appel OpenRouter, celui de traduction francais vers fon. Le client accepte
+  maintenant aussi les blocs texte, et une erreur vide indique le motif de fin
+  et le modele choisi par OpenRouter, sans exposer la cle ni la requete.
+  Le motif `length` avec `openai/gpt-6-luna` indique que le budget de sortie
+  a ete atteint avant le texte visible. Limite de sortie augmentee de 700 a
+  2 048 tokens ; un modele explicite capable de produire du fon pourra rester
+  necessaire. Tests mis a jour, serveur a redemarrer.
+- Ajout du paquet portable et du notebook pilote Colab pour le locuteur 4.
+- Verification de l'archive : 610 train, 62 validation, huit references,
+  aucun chevauchement de transcription.
+- Validation syntaxique du notebook ; aucune execution Colab ni adaptation
+  du modele n'a encore eu lieu.
+- Creation de ce fichier de suivi de projet.
+- L'utilisateur a signale un CalledProcessError dans la cellule d'entrainement
+  Colab. Le traceback fourni ne contient que le code de sortie 1 du processus
+  Accelerate, sans l'exception interne ; la cause reste donc inconnue.
+- Le notebook a ete modifie pour afficher la version de Python et capturer/
+  afficher stdout et stderr complets d'Accelerate avant de signaler l'echec.
+  Prochaine action : relancer la cellule d'entrainement mise a jour et examiner
+  les logs precedant l'erreur.
+- Les logs ont identifie la cause : le module compile
+  `monotonic_align.monotonic_align.core` est absent. Le depot communautaire
+  exige de compiler son extension Cython avec `monotonic_align/setup.py`
+  (et de creer le sous-dossier `monotonic_align/monotonic_align`) avant
+  l'entrainement. Le notebook effectue maintenant cette compilation et teste
+  l'import `from monotonic_align import maximum_path` avant de continuer.
+- Le code de sortie 1 du fine-tuner etait secondaire a cet import manquant.
+  La compilation n'a pas encore ete executee dans la session Colab de
+  l'utilisateur ; d'autres erreurs peuvent apparaitre ensuite.
+- Apres relance, le notebook s'est arrete sur le controle du marqueur
+  `raw_datasets = DatasetDict()` lors de la configuration du jeu local.
+  La cellule modifiait le script dans `/content/finetune-hf-vits`; une nouvelle
+  execution dans le meme runtime retrouvait le bloc deja remplace et echouait
+  au controle strict. Le notebook reconnait maintenant explicitement le bloc
+  local deja installe et le laisse intact (execution idempotente), tout en
+  continuant a arreter les versions inattendues du script avec les nombres de
+  marqueurs trouves.
+- Le README a ete actualise pour documenter ce comportement. Validation
+  syntaxique des huit cellules de code du notebook et controle des cas
+  « source originale » et « source deja patchée » effectues localement.
+- Le nouvel essai atteint le pretraitement, puis echoue dans le formateur
+  NumPy de `datasets` avec « Unable to avoid copy while creating an array ».
+  La trace montre `np.array(array, copy=False)` dans l'ancien formatter
+  `datasets` 2.17.1 sous Python 3.13 / NumPy 2. Le notebook utilise maintenant
+  `datasets==3.6.0`, dont le formatter traite explicitement NumPy >= 2 avec
+  `np.asarray`, et verifie la version avant de preparer les exemples.
+- Apres mise a jour des dependances, redemarrer le runtime Colab et rejouer
+  toutes les cellules depuis le debut ; la correction n'a pas encore ete
+  executee dans la session Colab de l'utilisateur.
+- L'essai suivant a commence l'entrainement (premier pas effectue), puis s'est
+  arrete dans `utils/plot.py` sur
+  `AttributeError: FigureCanvasAgg has no attribute tostring_rgb`. La cause
+  est l'API Matplotlib retiree dans la version de Colab, pendant la generation
+  d'un graphique, et non une erreur des donnees.
+- La cellule de configuration du fine-tuner remplace maintenant de facon
+  idempotente les deux appels `fig.canvas.tostring_rgb()` par une lecture RGB
+  via `fig.canvas.buffer_rgba()`, verifie le nombre de correspondances et
+  refuse une source inattendue.
+- La cellule d'entrainement utilise un dossier de sortie avec horodatage,
+  evitant de reutiliser le dossier partiel cree par cet essai echoue.
+  Notebook non encore reexecute apres cette correction.
+
+29 octobre 2026 — entree vocale locale
+- L'utilisateur a confirme que le parcours texte/OpenRouter fonctionne et a
+  choisi de passer a l'entree vocale.
+- Ajout de `tts_demo/assistant_asr.py` : transcription MMS locale en `fra` ou
+  `fon`, conversion audio mono/16 kHz, limite de 30 secondes et chargement
+  paresseux du modele `facebook/mms-1b-all`.
+- L'interface assistant propose maintenant micro ou fichier audio, puis un
+  apercu editable de la transcription avant l'envoi du texte a OpenRouter.
+  L'audio lui-meme reste local ; le modele ASR (1 milliard de parametres) sera
+  telecharge au premier usage. La couverture du fon par MMS est confirmee,
+  mais la precision reelle n'a pas encore ete evaluee.
+- Ajout de tests de pretraitement et de selection de langue ; 14 tests passent
+  et les modules modifies se compilent. L'import de l'interface Gradio passe.
+- L'assistant a ete redemarre sur le port 7861. Prochaine action : essayer une
+  courte phrase en francais puis en fon, relire les transcriptions et signaler
+  les erreurs.
+
+30 octobre 2026 — correction de l'enregistrement micro
+- Le navigateur de l'utilisateur avait bien l'autorisation micro et deux
+  appareils audio disponibles, mais les captures Gradio restaient a 0:00.
+  La console indiquait `EncodingError: Unable to decode audio data`.
+- Reproduction confirmee dans le navigateur : des blobs MediaRecorder WebM et
+  MP4 ne sont pas decodables par son AudioContext ; un WAV PCM est decodable.
+  L'echec se produit dans le navigateur avant l'appel a l'ASR, pas dans le
+  modele MMS ni dans OpenRouter.
+- Remplacement du bouton d'enregistrement Gradio par une capture micro Web
+  Audio qui encode les echantillons directement en WAV PCM 16 bits, les envoie
+  a un endpoint local et transcrit apres l'arret. Le texte reconnu remplit le
+  champ editable ; l'audio ne quitte pas l'ordinateur et n'est pas conserve.
+- L'upload audio reste disponible comme solution alternative. Redemarrer
+  l'application, puis cliquer « Parler », parler et cliquer
+  « Arrêter et transcrire ».
+- Verification navigateur avec un flux audio synthetique : le bouton genere un
+  WAV PCM valide, appelle bien la route locale et place le texte retourne dans
+  le champ editable. L'endpoint WAV a egalement ete teste sans telecharger le
+  modele ASR. Les 16 tests unitaires passent. Il reste a confirmer une capture
+  micro reelle et la qualite ASR sur le francais puis le fon.
+- A la demande de l'utilisateur, l'interface affiche maintenant une progression
+  minutee pendant l'enregistrement, puis une barre animee avec les etapes ASR
+  envoyees en flux par le serveur local. Les erreurs apparaissent en rouge ;
+  les exceptions inattendues sont journalisees dans le terminal.
+- Les mises a jour de transcription arrivent par flux SSE ; essais locaux
+  valides pour les evenements de progression, le texte final et une erreur ASR.
+  Les 16 tests unitaires passent et les fichiers Python se compilent.
+- Verification navigateur apres redemarrage : la barre d'enregistrement evolue
+  en temps reel, la barre de transcription est animee pendant les evenements
+  SSE, le statut indique les etapes, et un evenement d'erreur s'affiche en
+  rouge. Le texte final est ajoute au champ editable.
+
+3 novembre 2026 — chapitre pilote de jeu
+- Ajout de « La Frequence commune », une aventure web responsive de trois
+  missions accessible depuis l'accueil de l'assistant ou la route /game.
+- Les missions et formulations sont fictives et en francais ; le joueur peut
+  proposer sa propre formulation en fon, enregistrer sa voix ou continuer sans
+  contribuer. Le parcours de jeu n'appelle ni OpenRouter ni la synthese vocale.
+- Les contributions consenties sont stockees avec leur mission et la source
+  « game », sans audio synthetique, et portent le statut « unreviewed ».
+- Le pilote ne fournit pas encore d'outil de retrait, de verification par des
+  locuteurs, de protection anti-abus ou de gouvernance communautaire. Ne pas
+  l'exposer publiquement ni utiliser les donnees avant d'avoir traite ces
+  points. Les tests de route et de sauvegarde du jeu passent.
+
+3 novembre 2026 — migration du jeu vers Vue
+- Le front « La Frequence commune » est maintenant une application Vue 3 et
+  TypeScript construite avec Vite dans `tts_demo/frontend/`.
+- FastAPI sert le build sur `/game` et ses ressources statiques sur
+  `/game-assets`; le serveur de developpement Vite transmet les appels de
+  contribution a FastAPI.
+- Le build est integre a la commande de construction Render. Le front ne
+  modifie pas les parcours de conversation ou de contribution existants.
+- La dependance de verification de types Vue a ete mise a jour pour corriger
+  les alertes npm audit ; l'audit du front ne signale plus de vulnerabilites.
+- Le lancement du jeu sans contribution a ete verifie dans le navigateur.
+
+4 novembre 2026 — reconception culturelle du jeu pilote
+- Remplacement de la trame generique de reconstruction d'une radio par une
+  chronique contemporaine fictive et des situations de parole quotidienne.
+- Ajout d'un carnet historique consultable avec des liens vers Britannica et
+  l'UNESCO. Les notes distinguent les pouvoirs precoloniaux, le Dahomey et
+  l'Etat beninois contemporain ; elles signalent les incertitudes de dates et
+  donnent un contexte serieux a l'histoire de la traite transatlantique.
+- Les evenements historiques ne deviennent pas des enigmes ou recompenses.
+  Aucun rite, contenu sacre, chant ou proverbe n'est invente pour le jeu.
+- La version actuelle est une premiere synthese documentaire, pas une
+  validation par des historiens beninois ou des locuteurs fon. Toute extension
+  culturelle ou collecte publique attend cette consultation et des regles
+  d'attribution, de consentement et de retrait.
+
+4 novembre 2026 — itineraire urbain fictif
+- Ajout d'Afi, messagere fictive d'une radio de quartier, et d'un parcours
+  illustre en trois etapes : Cotonou, Porto-Novo et Abomey.
+- La progression des missions fait avancer le personnage sur un trace
+  schematique. Le trace n'est pas une carte routiere ; les rencontres et lieux
+  sont inventes et ne pretendent pas representer les usages linguistiques
+  d'une ville entiere.
+- L'accueil du jeu reste integre a /game ; l'histoire, le chapitre et la
+  contribution restent dans une seule application mobile.
+- Build Vue/TypeScript reussi ; progression de Cotonou a Porto-Novo et absence
+  de debordement horizontal verifies dans le navigateur.
+
+4 novembre 2026 — illustration urbaine et personnages
+- Remplacement des formes CSS generiques par une illustration vectorielle
+  detaillee d'une rue contemporaine fictive, d'un studio radio et de ses
+  personnages, avec des teints et traits varies et des vetements actuels.
+- Ajout d'un portrait SVG de Mina et cadrage adapte au panneau mobile ; les
+  scenes suivantes ont une legere variation d'ambiance.
+- Les illustrations sont des creations fictives, ni des photographies ni des
+  portraits de personnes reelles, et ne representent pas toutes les personnes
+  beninoises. Le build Vue/TypeScript passe ; le rendu de la premiere mission
+  a ete verifie dans le navigateur.
