@@ -1,7 +1,7 @@
 SUIVI DU PROJET : ASSISTANT VOCAL EN FON
 ========================================
 
-Derniere mise a jour : 4 novembre 2026 (reconception culturelle du jeu pilote)
+Derniere mise a jour : 19 novembre 2026 (decouverte du corpus JML-fon-speech-v1)
 Objectif general : construire a terme un assistant qui comprend le fon et peut
 repondre oralement en fon.
 
@@ -86,6 +86,28 @@ Etat actuel :
   synthetique sans consentement approprie. L'essai courant est restreint au
   locuteur adulte 4, dont l'autorisation pour l'entrainement TTS et la
   generation de parole synthetique a ete confirmee par l'operateur.
+
+2.5 JML-fon-speech-v1 (decouvert le 19 novembre 2026, non integre)
+
+- Source : https://huggingface.co/datasets/JaimeMaLangue/JML-fon-speech-v1
+- Projet « J'aime Ma Langue », initiative nationale beninoise pour les
+  technologies vocales (ministere du Numerique et de la Digitalisation,
+  mise en oeuvre par ASIN et IIDiA).
+- Deux sous-ensembles : transcribed (environ 64 600 enonces, 650 locuteurs
+  distincts, tons notes, relecture par un second annotateur) et
+  untranscribed (environ 95 700 enregistrements). Total 160 237 lignes,
+  39,6 Gio. Audio WAV mono 16 kHz 16 bits, enonces de 2,7 a 21,5 s.
+  Enregistrements realises sur telephone mobile par des volontaires.
+- Licence CC-BY-SA-4.0 : usage y compris commercial autorise avec
+  attribution et partage dans les memes conditions pour une version
+  adaptee. Plus permissive que facebook/mms-tts-fon (CC BY-NC 4.0).
+- La fiche indique un consentement des volontaires pour l'usage declare
+  (ASR, pre-entrainement). Ce consentement ne vaut pas automatiquement
+  autorisation de cloner la voix d'un locuteur individuel pour du TTS
+  mono-locuteur ; a verifier avant tout usage de ce type.
+- Rien n'a encore ete telecharge ni integre a ce depot. Usage potentiel :
+  ajustement ASR specifique au fon (facebook/mms-1b-all), et eventuellement
+  pre-entrainement TTS multi-locuteurs avec le sous-ensemble non transcrit.
 
 Documentation des sources externes :
 FFR-Dataset/external/README.md
@@ -465,6 +487,19 @@ Verification locale realisee apres preparation :
   contribution restent dans une seule application mobile.
 - Build Vue/TypeScript reussi ; progression de Cotonou a Porto-Novo et absence
   de debordement horizontal verifies dans le navigateur.
+
+19 novembre 2026 — decouverte du corpus JML-fon-speech-v1
+- L'utilisateur a signale le dataset Hugging Face
+  JaimeMaLangue/JML-fon-speech-v1 : corpus fongbe du projet national
+  « J'aime Ma Langue », environ 64 600 enonces transcrits sur 650
+  locuteurs et 95 700 enregistrements non transcrits, licence
+  CC-BY-SA-4.0. Voir section 2.5 pour le detail.
+- Interet principal : un corpus ASR fon multi-locuteurs d'une echelle
+  inedite dans ce projet, sous une licence plus permissive que le modele
+  TTS de base. Rien n'a ete telecharge ni decide ; evaluer d'abord si le
+  consentement declare couvre l'usage ASR vise avant toute integration.
+- Aucune action technique effectuee sur ce point ; prochaine etape a
+  discuter avec l'utilisateur.
 
 4 novembre 2026 — illustration urbaine et personnages
 - Remplacement des formes CSS generiques par une illustration vectorielle

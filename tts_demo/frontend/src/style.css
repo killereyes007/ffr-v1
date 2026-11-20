@@ -52,10 +52,14 @@ a {
   color: inherit;
 }
 
+#app {
+  width: min(430px, 100%);
+}
+
 .shell {
   position: relative;
   display: flex;
-  width: min(430px, 100%);
+  width: 100%;
   height: min(900px, calc(100dvh - 40px));
   min-height: min(600px, calc(100dvh - 40px));
   flex-direction: column;
@@ -160,7 +164,10 @@ header {
   background: var(--gold);
   box-shadow: 0 5px 16px rgba(245, 196, 81, 0.2);
   color: #171932;
+  font-size: 17px;
   font-weight: 950;
+  line-height: 1;
+  text-align: center;
 }
 
 .brand strong,
@@ -521,7 +528,7 @@ h1 {
 
 .welcome-radio-caption {
   position: absolute;
-  bottom: 12px;
+  top: 12px;
   left: 14px;
   color: rgba(255, 255, 255, 0.78);
   font-size: 8px;
@@ -612,6 +619,69 @@ h1 {
 .welcome-note {
   margin: 0 2px;
   font-size: 11px;
+}
+
+.install-banner {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 17px;
+  border: 1px solid rgba(245, 196, 81, 0.55);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(245, 196, 81, 0.18), rgba(245, 196, 81, 0.06));
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.install-banner:hover {
+  border-color: var(--gold);
+  background: linear-gradient(135deg, rgba(245, 196, 81, 0.26), rgba(245, 196, 81, 0.08));
+}
+
+.install-banner-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #182044;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.install-banner-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.install-banner-copy strong {
+  font-size: 14px;
+}
+
+.install-banner-copy small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.install-banner-arrow {
+  flex: none;
+  color: var(--gold);
+  font-size: 18px;
+}
+
+.install-status {
+  margin: 0 2px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .progress-wrap {
@@ -897,10 +967,10 @@ audio {
   display: grid;
   min-height: 68px;
   flex: none;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   align-items: stretch;
   margin: 0 -18px;
-  padding: 5px 12px max(7px, env(safe-area-inset-bottom));
+  padding: 5px 8px max(7px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
   background: rgba(13, 18, 41, 0.92);
   backdrop-filter: blur(18px);
@@ -917,14 +987,14 @@ audio {
   border-radius: 12px;
   background: transparent;
   color: #929bb8;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   text-decoration: none;
   cursor: pointer;
 }
 
 .phone-nav-item > span:first-child {
-  font-size: 19px;
+  font-size: 16px;
   line-height: 1.15;
 }
 
@@ -2138,4 +2208,270 @@ audio {
     scroll-behavior: auto !important;
     transition: none !important;
   }
+}
+
+/* --- Assistant screen (ported from the previous Gradio chat screen) --- */
+
+.assistant-card {
+  text-align: center;
+}
+
+.assistant-head {
+  margin-bottom: 14px;
+}
+
+.assistant-head h1 {
+  margin: 8px 0 14px;
+  font-size: 27px;
+  letter-spacing: -0.03em;
+}
+
+.assistant-language {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.assistant-language select {
+  min-width: 128px;
+  padding: 9px 32px 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background-color: var(--ink);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23bec5dd' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+.guide-halo {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  background: radial-gradient(ellipse, rgba(245, 196, 81, 0.13), rgba(70, 86, 190, 0.05) 48%, transparent 72%);
+}
+
+.guide {
+  width: auto;
+  height: 230px;
+  max-width: 100%;
+}
+
+.guide svg {
+  display: block;
+  width: auto;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 18px 26px rgba(0, 0, 0, 0.24));
+}
+
+.guide-arm {
+  transform-box: view-box;
+  transform-origin: 166px 246px;
+}
+
+.guide[data-state="idle"] .guide-arm,
+.guide[data-state="listening"] .guide-arm {
+  animation: guide-wave 2.4s ease-in-out infinite;
+}
+
+.guide[data-state="speaking"] .guide-mouth {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: guide-talk 0.24s ease-in-out infinite alternate;
+}
+
+@keyframes guide-wave {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(7deg); }
+}
+
+@keyframes guide-talk {
+  from { transform: scaleY(0.65); }
+  to { transform: scaleY(1.2); }
+}
+
+.mic-button {
+  display: flex;
+  min-width: 210px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 4px auto 0;
+  padding: 13px 24px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--gold), #e8a53a);
+  color: #182044;
+  box-shadow: 0 10px 26px rgba(245, 177, 38, 0.24);
+  font-size: 15px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.mic-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.mic-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mic-button[data-state="listening"] {
+  background: linear-gradient(135deg, #ef6675, #d84161);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(216, 65, 97, 0.25);
+}
+
+.mic-button:disabled {
+  opacity: 0.76;
+  cursor: wait;
+}
+
+.progress-track {
+  width: min(260px, 90%);
+  height: 6px;
+  margin: 12px auto 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.progress-track[data-mode="hidden"] {
+  display: none;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gold);
+  transition: width 100ms linear;
+}
+
+.progress-track[data-mode="complete"] .progress-fill {
+  background: #35bb83;
+}
+
+.progress-track[data-mode="error"] .progress-fill {
+  background: #ef6675;
+}
+
+.assistant-transcript h2 {
+  margin: 0 0 4px;
+  font-size: 19px;
+}
+
+.contribution-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide *, .progress-fill, .mic-button {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* --- Onboarding + identification (first run only) --- */
+
+.onboarding-screen {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+}
+
+.onboarding-card {
+  width: 100%;
+}
+
+.onboarding-card h1 {
+  margin: 10px 0 12px;
+  font-size: 25px;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.onboarding-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.onboarding-list li strong {
+  font-size: 13px;
+}
+
+.onboarding-list li span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.onboarding-dots {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 22px;
+}
+
+.onboarding-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.onboarding-dots span.is-active {
+  background: var(--gold);
+}
+
+.onboarding-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+#speaker-label {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  outline: none;
+  background: rgba(7, 11, 29, 0.72);
+  color: #fff;
+  font-size: 15px;
+}
+
+#speaker-label:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(245, 196, 81, 0.13);
 }

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { usePwaInstall } from "./pwaInstall";
+import { generateDefaultLabel, getSpeakerIdentity, hasOnboarded, saveIdentity } from "./identity";
 
 interface Choice {
   text: string;
@@ -214,7 +216,61 @@ const historyNotes: HistoryNote[] = [
 ];
 
 const missionNumber = ref(0);
-const activeScreen = ref<"home" | "game">("game");
+const activeScreen = ref<"home" | "game" | "assistant" | "collecte">("game");
+
+interface OnboardingSlide {
+  title: string;
+  body?: string;
+  list?: { label: string; detail: string }[];
+}
+
+const onboardingSlides: OnboardingSlide[] = [
+  {
+    title: "Bienvenue dans Le carnet des voix",
+    body:
+      "Un prototype de recherche sur le fon, créé pour explorer la traduction, la voix et la collecte de phrases avec les locuteurs. Ce n'est pas un produit fini : certaines réponses peuvent être imparfaites.",
+  },
+  {
+    title: "Cinq façons de participer",
+    list: [
+      { label: "Histoire", detail: "Les repères historiques du Bénin." },
+      { label: "Ma voix", detail: "Contribuer une traduction pendant une mission." },
+      { label: "Assistant", detail: "Parler et écouter une réponse en fon." },
+      { label: "Collecte", detail: "Proposer une phrase fon librement." },
+      { label: "Accueil", detail: "Revenir au point de départ à tout moment." },
+    ],
+  },
+  {
+    title: "Tes contributions, tes choix",
+    body:
+      "Chaque enregistrement est facultatif et demande ton consentement explicite. Les données sont conservées sur le serveur du prototype pour l'évaluation et l'amélioration des outils, et restent à vérifier par des locuteurs.",
+  },
+];
+
+const appStage = ref<"onboarding" | "identify" | "ready">("ready");
+const onboardingSlideIndex = ref(0);
+const isLastOnboardingSlide = computed(
+  () => onboardingSlideIndex.value === onboardingSlides.length - 1,
+);
+const speakerLabelInput = ref("");
+
+function nextOnboardingSlide() {
+  if (isLastOnboardingSlide.value) {
+    goToIdentify();
+    return;
+  }
+  onboardingSlideIndex.value += 1;
+}
+
+function goToIdentify() {
+  appStage.value = "identify";
+  speakerLabelInput.value = generateDefaultLabel();
+}
+
+function confirmIdentity() {
+  saveIdentity(speakerLabelInput.value);
+  appStage.value = "ready";
+}
 const routeStop = computed(
   () => routeStops[Math.min(missionNumber.value, routeStops.length - 1)],
 );
@@ -471,6 +527,7 @@ async function saveContribution() {
   saving.value = true;
   setGameStatus("Envoi de la contribution au serveur du prototype…");
   try {
+    const identity = getSpeakerIdentity();
     const response = await fetch("/training-phrases", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -483,6 +540,8 @@ async function saveContribution() {
         fon_text: fonText.value.trim(),
         human_audio: humanAudio.value,
         synthesized_audio: null,
+        speaker_id: identity.speakerId,
+        speaker_label: identity.speakerLabel,
       }),
     });
     const data: unknown = await response.json();
@@ -531,9 +590,554 @@ function restartChapter() {
   recordingStatus.value = "Enregistrement facultatif, 30 secondes maximum.";
 }
 
+// --- Assistant screen (voice conversation: mic -> ASR -> LLM -> traduction -> TTS) ---
+
+type GuideState = "idle" | "listening" | "speaking" | "processing";
+type ProgressMode = "hidden" | "recording" | "indeterminate" | "complete" | "error";
+
+const assistantLanguage = ref<"Français" | "Fon">("Français");
+const assistantGuideState = ref<GuideState>("idle");
+const assistantRecording = ref(false);
+const assistantMicDisabled = ref(false);
+const assistantMicLabel = ref("Parler");
+const assistantStatus = ref("Appuie sur Parler pour commencer.");
+const assistantStatusState = ref<"info" | "error">("info");
+const assistantProgressMode = ref<ProgressMode>("hidden");
+const assistantProgressValue = ref(0);
+const assistantTranscript = ref("");
+const assistantAnswer = ref("");
+const assistantResponseAudioUrl = ref<string | null>(null);
+const assistantShowReplay = ref(false);
+const assistantContributionVisible = ref(false);
+const assistantConsent = ref(false);
+const assistantContributionStatus = ref("");
+const assistantContributionStatusState = ref<"info" | "error" | "success">("info");
+const assistantContributionSaved = ref(false);
+const assistantSaving = ref(false);
+const assistantAudioEl = ref<HTMLAudioElement | null>(null);
+
+let assistantCapture: AudioCapture | null = null;
+let assistantProgressTimer: ReturnType<typeof setInterval> | null = null;
+let assistantStageTimer: ReturnType<typeof setInterval> | null = null;
+let assistantLastSpeechAt: number | undefined;
+let assistantHasDetectedSpeech = false;
+let assistantResponseAudioUrlObject: string | null = null;
+let assistantLastInputWav: Blob | undefined;
+let assistantRawInputTranscript = "";
+let assistantRawAnswer = "";
+
+const conversationId =
+  sessionStorage.getItem("fonConversationId") ??
+  (() => {
+    const id = crypto.randomUUID();
+    sessionStorage.setItem("fonConversationId", id);
+    return id;
+  })();
+
+function stopAssistantStageTimer() {
+  if (assistantStageTimer) clearInterval(assistantStageTimer);
+  assistantStageTimer = null;
+}
+
+function updateAssistantStage(message: string) {
+  stopAssistantStageTimer();
+  assistantStatus.value = message;
+  assistantStatusState.value = "info";
+  assistantGuideState.value = "processing";
+  const stages: [string, string][] = [
+    ["Chargement du modèle de reconnaissance", "Chargement du modèle"],
+    ["Chargement de l'adaptateur de langue", "Chargement de l'adaptateur"],
+    ["Analyse de la parole en cours", "Analyse de la parole"],
+    ["Finalisation du texte reconnu", "Finalisation du texte"],
+    ["Génération de la réponse", "Génération de la réponse"],
+    ["Synthèse vocale de la réponse", "Synthèse de la voix"],
+  ];
+  const activeStage = stages.find(([prefix]) => message.startsWith(prefix));
+  if (!activeStage) return;
+  const startedAt = performance.now();
+  assistantStageTimer = setInterval(() => {
+    const elapsedSeconds = Math.floor((performance.now() - startedAt) / 1000);
+    assistantStatus.value = `${activeStage[1]}… (${elapsedSeconds} s)`;
+  }, 1000);
+}
+
+async function playAssistantResponse() {
+  assistantShowReplay.value = false;
+  assistantGuideState.value = "speaking";
+  assistantMicLabel.value = "Je parle…";
+  try {
+    await assistantAudioEl.value?.play();
+    assistantStatus.value = "Réponse en fon en cours…";
+    assistantStatusState.value = "info";
+  } catch {
+    assistantGuideState.value = "idle";
+    assistantMicLabel.value = "Parler";
+    assistantShowReplay.value = true;
+    assistantMicDisabled.value = false;
+    assistantStatus.value = "La réponse est prête. Clique sur « Écouter la réponse ».";
+  }
+}
+
+function onAssistantAudioEnded() {
+  assistantMicDisabled.value = false;
+  assistantMicLabel.value = "Parler";
+  assistantGuideState.value = "idle";
+  assistantStatus.value = "À toi de parler.";
+  assistantStatusState.value = "info";
+}
+
+async function startAssistantRecording() {
+  assistantMicDisabled.value = true;
+  assistantAudioEl.value?.pause();
+  assistantGuideState.value = "idle";
+  assistantMicLabel.value = "Connexion…";
+  assistantContributionVisible.value = false;
+  assistantLastInputWav = undefined;
+  assistantRawInputTranscript = "";
+  assistantRawAnswer = "";
+  if (assistantResponseAudioUrlObject) URL.revokeObjectURL(assistantResponseAudioUrlObject);
+  assistantResponseAudioUrlObject = null;
+  assistantResponseAudioUrl.value = null;
+  assistantProgressMode.value = "hidden";
+  assistantTranscript.value = "";
+  assistantAnswer.value = "";
+  assistantContributionStatus.value = "";
+  assistantStatus.value = "Connexion au microphone…";
+  assistantStatusState.value = "info";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    const context = new AudioContext();
+    await context.resume();
+    const source = context.createMediaStreamSource(stream);
+    const processor = context.createScriptProcessor(4096, 1, 1);
+    const silentOutput = context.createGain();
+    silentOutput.gain.value = 0;
+    const chunks: Float32Array[] = [];
+    processor.onaudioprocess = (event) => {
+      const samples = new Float32Array(event.inputBuffer.getChannelData(0));
+      chunks.push(samples);
+      let energy = 0;
+      for (const sample of samples) energy += sample * sample;
+      const rms = Math.sqrt(energy / samples.length);
+      if (rms >= 0.018) {
+        if (!assistantHasDetectedSpeech) {
+          assistantStatus.value = "Parole détectée. L'envoi se fera après une courte pause.";
+        }
+        assistantHasDetectedSpeech = true;
+        assistantLastSpeechAt = performance.now();
+      }
+    };
+    source.connect(processor);
+    processor.connect(silentOutput);
+    silentOutput.connect(context.destination);
+    assistantCapture = { stream, context, source, processor, silentOutput, chunks, sampleRate: context.sampleRate };
+    const recordingStartedAt = performance.now();
+    assistantLastSpeechAt = undefined;
+    assistantHasDetectedSpeech = false;
+    assistantRecording.value = true;
+    assistantProgressMode.value = "recording";
+    assistantProgressValue.value = 0;
+    assistantGuideState.value = "listening";
+    assistantMicLabel.value = "Je t'écoute…";
+    assistantMicDisabled.value = false;
+    assistantStatus.value = "Parle normalement. J'enverrai après 1,5 seconde de silence.";
+    assistantProgressTimer = setInterval(() => {
+      const elapsedSeconds = Math.min(30, (performance.now() - recordingStartedAt) / 1000);
+      assistantProgressValue.value = (elapsedSeconds / 30) * 100;
+      if (
+        assistantHasDetectedSpeech &&
+        assistantLastSpeechAt &&
+        performance.now() - assistantLastSpeechAt >= 1500
+      ) {
+        assistantStatus.value = "Silence détecté. Envoi de ta phrase…";
+        void stopAssistantRecording();
+        return;
+      }
+      if (elapsedSeconds >= 30) {
+        assistantStatus.value = "Limite de 30 secondes atteinte. Envoi de ta phrase…";
+        void stopAssistantRecording();
+      }
+    }, 100);
+  } catch (error) {
+    if (assistantProgressTimer) clearInterval(assistantProgressTimer);
+    assistantProgressTimer = null;
+    assistantMicDisabled.value = false;
+    assistantMicLabel.value = "Parler";
+    assistantGuideState.value = "idle";
+    assistantProgressMode.value = "hidden";
+    assistantStatus.value = `Impossible d'accéder au micro : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+    assistantStatusState.value = "error";
+  }
+}
+
+async function stopAssistantRecording() {
+  if (!assistantCapture) return;
+  const active = assistantCapture;
+  assistantCapture = null;
+  assistantRecording.value = false;
+  assistantMicDisabled.value = true;
+  if (assistantProgressTimer) clearInterval(assistantProgressTimer);
+  assistantProgressTimer = null;
+  assistantMicLabel.value = "Envoi…";
+  assistantGuideState.value = "processing";
+  try {
+    active.processor.disconnect();
+    active.source.disconnect();
+    active.silentOutput.disconnect();
+    const sampleRate = active.context.sampleRate;
+    await active.context.close();
+    active.stream.getTracks().forEach((track) => track.stop());
+
+    if (!assistantHasDetectedSpeech) {
+      assistantMicDisabled.value = false;
+      assistantMicLabel.value = "Parler";
+      assistantGuideState.value = "idle";
+      assistantProgressMode.value = "hidden";
+      assistantStatus.value = "Je n'ai pas détecté de parole. Réessaie en parlant près du micro.";
+      assistantStatusState.value = "error";
+      return;
+    }
+
+    const wav = encodeWav(active.chunks, sampleRate);
+    assistantLastInputWav = wav;
+    assistantProgressMode.value = "indeterminate";
+    assistantStatus.value = "Transcription locale en cours…";
+    assistantStatusState.value = "info";
+
+    const response = await fetch(`/voice-turn?language=${encodeURIComponent(assistantLanguage.value)}`, {
+      method: "POST",
+      headers: { "Content-Type": "audio/wav", "X-Conversation-Id": conversationId },
+      body: wav,
+    });
+    if (!response.ok) {
+      const errorResult = await response.json();
+      throw new Error(errorResult.detail || "L'échange vocal a échoué.");
+    }
+    if (!response.body) throw new Error("Le serveur n'a pas démarré l'échange vocal.");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let completedTurn = false;
+    const handleEvent = (event: Record<string, unknown>) => {
+      if (event.type === "progress") {
+        updateAssistantStage(String(event.message));
+      } else if (event.type === "transcript") {
+        assistantRawInputTranscript = String(event.text);
+        assistantTranscript.value = String(event.text);
+        updateAssistantStage("Transcription terminée. Envoi au modèle…");
+      } else if (event.type === "done") {
+        completedTurn = true;
+        stopAssistantStageTimer();
+        assistantRawAnswer = String(event.fon_answer);
+        assistantAnswer.value = String(event.fon_answer);
+        const audioBytes = Uint8Array.from(
+          atob(String(event.audio)),
+          (character) => character.charCodeAt(0),
+        );
+        if (assistantResponseAudioUrlObject) URL.revokeObjectURL(assistantResponseAudioUrlObject);
+        assistantResponseAudioUrlObject = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
+        assistantResponseAudioUrl.value = assistantResponseAudioUrlObject;
+        assistantProgressMode.value = "complete";
+        assistantProgressValue.value = 100;
+        assistantContributionVisible.value = true;
+        assistantContributionSaved.value = false;
+        assistantConsent.value = false;
+        void nextTick(() => void playAssistantResponse());
+      } else if (event.type === "error") {
+        throw new Error(String(event.message));
+      }
+    };
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const messages = buffer.split("\n\n");
+      buffer = messages.pop() || "";
+      for (const message of messages) {
+        const dataLine = message.split("\n").find((line) => line.startsWith("data:"));
+        if (dataLine) handleEvent(JSON.parse(dataLine.slice(5).trim()));
+      }
+      if (done) break;
+    }
+    if (buffer.startsWith("data:")) handleEvent(JSON.parse(buffer.slice(5).trim()));
+    if (!completedTurn) throw new Error("L'assistant n'a pas terminé sa réponse.");
+  } catch (error) {
+    stopAssistantStageTimer();
+    assistantGuideState.value = "idle";
+    assistantMicLabel.value = "Parler";
+    assistantProgressMode.value = "error";
+    assistantStatus.value = `Erreur : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+    assistantStatusState.value = "error";
+    assistantMicDisabled.value = false;
+  } finally {
+    stopAssistantStageTimer();
+  }
+}
+
+async function saveAssistantContribution() {
+  if (!assistantConsent.value || !assistantLastInputWav || assistantContributionSaved.value) return;
+  const correctedTranscript = assistantTranscript.value.trim();
+  const correctedAnswer = assistantAnswer.value.trim();
+  if (!correctedTranscript || !correctedAnswer) {
+    assistantContributionStatus.value =
+      "La transcription et la réponse en fon doivent toutes les deux être renseignées.";
+    assistantContributionStatusState.value = "error";
+    return;
+  }
+  assistantSaving.value = true;
+  assistantContributionStatus.value = "Enregistrement local de la contribution…";
+  assistantContributionStatusState.value = "info";
+  try {
+    const identity = getSpeakerIdentity();
+    const response = await fetch("/training-examples", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        consent: assistantConsent.value,
+        language: assistantLanguage.value,
+        input_audio: await encodeBase64(assistantLastInputWav),
+        asr_transcript: assistantRawInputTranscript,
+        input_transcript: correctedTranscript,
+        assistant_fon_text_original: assistantRawAnswer,
+        assistant_fon_text: correctedAnswer,
+        speaker_id: identity.speakerId,
+        speaker_label: identity.speakerLabel,
+      }),
+    });
+    const data: unknown = await response.json();
+    const record = data as { detail?: string; sample_id?: string; assistant_audio?: string };
+    if (!response.ok) throw new Error(record.detail || "La contribution n'a pas pu être enregistrée.");
+    assistantContributionSaved.value = true;
+    assistantContributionStatus.value = `Enregistrée sur cet ordinateur (référence ${record.sample_id}).`;
+    assistantContributionStatusState.value = "success";
+    const audioBytes = Uint8Array.from(
+      atob(String(record.assistant_audio)),
+      (character) => character.charCodeAt(0),
+    );
+    if (assistantResponseAudioUrlObject) URL.revokeObjectURL(assistantResponseAudioUrlObject);
+    assistantResponseAudioUrlObject = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
+    assistantResponseAudioUrl.value = assistantResponseAudioUrlObject;
+    assistantShowReplay.value = true;
+  } catch (error) {
+    assistantContributionStatus.value = `Erreur : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+    assistantContributionStatusState.value = "error";
+  } finally {
+    assistantSaving.value = false;
+  }
+}
+
+// --- Collecte screen (phrase libre : texte + voix IA + voix humaine, sans contexte de mission) ---
+
+const collecteFrench = ref("");
+const collecteFon = ref("");
+const collecteAiAudioUrl = ref<string | null>(null);
+const collecteAiAudioBase64 = ref<string | null>(null);
+const collecteHumanAudio = ref<string | null>(null);
+const collecteHumanAudioUrl = ref<string | null>(null);
+const collecteRecording = ref(false);
+const collecteRecordStatus = ref("L'enregistrement de ta voix est facultatif. Clique à nouveau pour terminer.");
+const collectePlaying = ref(false);
+const collecteConsent = ref(false);
+const collecteSaveStatus = ref("");
+const collecteSaveStatusState = ref<"info" | "error" | "success">("info");
+const collecteSaving = ref(false);
+const collecteSaved = ref(false);
+const collecteAiAudioEl = ref<HTMLAudioElement | null>(null);
+
+let collecteCapture: AudioCapture | null = null;
+let collecteStopTimer: ReturnType<typeof setTimeout> | null = null;
+
+const canSaveCollecte = computed(() =>
+  Boolean(
+    collecteFrench.value.trim() &&
+      collecteFon.value.trim() &&
+      collecteConsent.value &&
+      !collecteRecording.value &&
+      !collecteSaving.value,
+  ),
+);
+
+watch([collecteFrench, collecteFon], () => {
+  collecteSaved.value = false;
+  collecteSaveStatus.value = "";
+});
+
+watch(collecteFon, () => {
+  collecteAiAudioBase64.value = null;
+  if (collecteAiAudioUrl.value) {
+    URL.revokeObjectURL(collecteAiAudioUrl.value);
+    collecteAiAudioUrl.value = null;
+  }
+});
+
+async function playCollecteAiVoice() {
+  const text = collecteFon.value.trim();
+  if (!text) {
+    collecteRecordStatus.value = "Écris d'abord une traduction en fon.";
+    return;
+  }
+  collectePlaying.value = true;
+  try {
+    const response = await fetch("/training-synthesis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fon_text: text }),
+    });
+    const result: unknown = await response.json();
+    const record = result as { detail?: string; audio?: string };
+    if (!response.ok) throw new Error(record.detail || "La synthèse n'a pas pu être générée.");
+    collecteAiAudioBase64.value = record.audio ?? null;
+    const audioBytes = Uint8Array.from(atob(String(record.audio)), (character) => character.charCodeAt(0));
+    if (collecteAiAudioUrl.value) URL.revokeObjectURL(collecteAiAudioUrl.value);
+    collecteAiAudioUrl.value = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
+    await nextTick();
+    await collecteAiAudioEl.value?.play();
+    collecteRecordStatus.value = "Lecture de la traduction en fon.";
+  } catch (error) {
+    collecteRecordStatus.value = `Erreur : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+  } finally {
+    collectePlaying.value = false;
+  }
+}
+
+async function startCollecteRecording() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    collecteRecordStatus.value = "L'accès au micro n'est pas disponible dans ce navigateur.";
+    return;
+  }
+  collecteRecordStatus.value = "Connexion au microphone…";
+  let stream: MediaStream | null = null;
+  let context: AudioContext | null = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    context = new AudioContext();
+    await context.resume();
+    const source = context.createMediaStreamSource(stream);
+    const processor = context.createScriptProcessor(4096, 1, 1);
+    const silentOutput = context.createGain();
+    silentOutput.gain.value = 0;
+    const chunks: Float32Array[] = [];
+    processor.onaudioprocess = (event) => {
+      chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+    };
+    source.connect(processor);
+    processor.connect(silentOutput);
+    silentOutput.connect(context.destination);
+    collecteCapture = { stream, context, source, processor, silentOutput, chunks, sampleRate: context.sampleRate };
+    collecteHumanAudio.value = null;
+    if (collecteHumanAudioUrl.value) URL.revokeObjectURL(collecteHumanAudioUrl.value);
+    collecteHumanAudioUrl.value = null;
+    collecteRecording.value = true;
+    collecteRecordStatus.value = "Enregistrement… lis la phrase en fon, puis termine l'enregistrement.";
+    collecteStopTimer = setTimeout(() => {
+      if (collecteRecording.value) {
+        collecteRecordStatus.value = "Limite de 30 secondes atteinte. Finalisation de l'enregistrement.";
+        void stopCollecteRecording();
+      }
+    }, 30_000);
+  } catch (error) {
+    stream?.getTracks().forEach((track) => track.stop());
+    if (context && context.state !== "closed") await context.close();
+    collecteRecordStatus.value = `Impossible d'accéder au micro : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+  }
+}
+
+async function stopCollecteRecording() {
+  if (!collecteCapture) return;
+  if (collecteStopTimer) clearTimeout(collecteStopTimer);
+  collecteStopTimer = null;
+  const active = collecteCapture;
+  collecteCapture = null;
+  collecteRecording.value = false;
+  try {
+    active.processor.disconnect();
+    active.source.disconnect();
+    active.silentOutput.disconnect();
+    const sampleRate = active.context.sampleRate;
+    await active.context.close();
+    active.stream.getTracks().forEach((track) => track.stop());
+    const blob = encodeWav(active.chunks, sampleRate);
+    collecteHumanAudio.value = await encodeBase64(blob);
+    if (collecteHumanAudioUrl.value) URL.revokeObjectURL(collecteHumanAudioUrl.value);
+    collecteHumanAudioUrl.value = URL.createObjectURL(blob);
+    collecteRecordStatus.value = "Ta prononciation est prête à être enregistrée avec ton consentement.";
+  } catch (error) {
+    collecteRecordStatus.value = `Impossible de finaliser l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+  }
+}
+
+async function saveCollecteContribution() {
+  const french = collecteFrench.value.trim();
+  const fon = collecteFon.value.trim();
+  if (!collecteConsent.value) return;
+  if (!french || !fon) {
+    collecteSaveStatus.value = "Renseigne la phrase française et sa traduction en fon.";
+    collecteSaveStatusState.value = "error";
+    return;
+  }
+  collecteSaving.value = true;
+  collecteSaveStatus.value = "Enregistrement local de la contribution…";
+  collecteSaveStatusState.value = "info";
+  try {
+    const identity = getSpeakerIdentity();
+    const response = await fetch("/training-phrases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        consent: collecteConsent.value,
+        source: null,
+        mission_id: null,
+        mission_title: null,
+        french_text: french,
+        fon_text: fon,
+        human_audio: collecteHumanAudio.value,
+        synthesized_audio: collecteAiAudioBase64.value,
+        speaker_id: identity.speakerId,
+        speaker_label: identity.speakerLabel,
+      }),
+    });
+    const result: unknown = await response.json();
+    const record = result as { detail?: string; sample_id?: string; synthesized_audio?: string };
+    if (!response.ok) throw new Error(record.detail || "La contribution n'a pas pu être enregistrée.");
+    collecteSaved.value = true;
+    collecteSaveStatus.value = `Contribution enregistrée sur cet ordinateur (référence ${record.sample_id}).`;
+    collecteSaveStatusState.value = "success";
+    const bytes = Uint8Array.from(atob(String(record.synthesized_audio)), (character) => character.charCodeAt(0));
+    if (collecteAiAudioUrl.value) URL.revokeObjectURL(collecteAiAudioUrl.value);
+    collecteAiAudioUrl.value = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+  } catch (error) {
+    collecteSaveStatus.value = `Erreur : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+    collecteSaveStatusState.value = "error";
+  } finally {
+    collecteSaving.value = false;
+  }
+}
+
+const { canInstall, installed, promptInstall } = usePwaInstall();
+const installStatus = ref("");
+
+async function handleInstallClick() {
+  const accepted = await promptInstall();
+  installStatus.value = accepted
+    ? "Application installée."
+    : "Installation annulée. Tu peux réessayer à tout moment.";
+}
+
 onMounted(() => {
   updateClock();
   clockTimer = setInterval(updateClock, 60_000);
+  const requestedScreen = new URLSearchParams(window.location.search).get("screen");
+  if (requestedScreen === "assistant" || requestedScreen === "collecte") {
+    activeScreen.value = requestedScreen;
+  }
+  if (!hasOnboarded()) {
+    appStage.value = "onboarding";
+    onboardingSlideIndex.value = 0;
+  }
 });
 
 onBeforeUnmount(() => {
@@ -543,6 +1147,20 @@ onBeforeUnmount(() => {
   if (capture) {
     capture.stream.getTracks().forEach((track) => track.stop());
     void capture.context.close();
+  }
+  stopAssistantStageTimer();
+  if (assistantProgressTimer) clearInterval(assistantProgressTimer);
+  if (assistantResponseAudioUrlObject) URL.revokeObjectURL(assistantResponseAudioUrlObject);
+  if (assistantCapture) {
+    assistantCapture.stream.getTracks().forEach((track) => track.stop());
+    void assistantCapture.context.close();
+  }
+  if (collecteStopTimer) clearTimeout(collecteStopTimer);
+  if (collecteAiAudioUrl.value) URL.revokeObjectURL(collecteAiAudioUrl.value);
+  if (collecteHumanAudioUrl.value) URL.revokeObjectURL(collecteHumanAudioUrl.value);
+  if (collecteCapture) {
+    collecteCapture.stream.getTracks().forEach((track) => track.stop());
+    void collecteCapture.context.close();
   }
 });
 </script>
@@ -557,6 +1175,66 @@ onBeforeUnmount(() => {
         <span class="battery-icon"><span></span></span>
       </span>
     </div>
+
+    <main v-if="appStage === 'onboarding'" class="onboarding-screen">
+      <section class="card onboarding-card">
+        <span class="eyebrow">Avant de commencer</span>
+        <h1>{{ onboardingSlides[onboardingSlideIndex].title }}</h1>
+        <p v-if="onboardingSlides[onboardingSlideIndex].body" class="story-copy">
+          {{ onboardingSlides[onboardingSlideIndex].body }}
+        </p>
+        <ul v-if="onboardingSlides[onboardingSlideIndex].list" class="onboarding-list">
+          <li v-for="item in onboardingSlides[onboardingSlideIndex].list" :key="item.label">
+            <strong>{{ item.label }}</strong>
+            <span>{{ item.detail }}</span>
+          </li>
+        </ul>
+        <div class="onboarding-dots" aria-hidden="true">
+          <span
+            v-for="(slide, index) in onboardingSlides"
+            :key="slide.title"
+            :class="{ 'is-active': index === onboardingSlideIndex }"
+          ></span>
+        </div>
+        <div class="onboarding-actions">
+          <button
+            v-if="!isLastOnboardingSlide"
+            class="button button-secondary"
+            type="button"
+            @click="goToIdentify"
+          >
+            Passer
+          </button>
+          <button class="button" type="button" @click="nextOnboardingSlide">
+            {{ isLastOnboardingSlide ? "Commencer" : "Suivant" }}
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <main v-else-if="appStage === 'identify'" class="onboarding-screen">
+      <section class="card onboarding-card">
+        <span class="eyebrow">Avant de commencer</span>
+        <h1>Choisis un pseudonyme</h1>
+        <p class="story-copy">
+          Ce pseudonyme permet de regrouper tes contributions entre elles, sans révéler ton
+          identité. Tu peux garder celui proposé ou en choisir un autre.
+        </p>
+        <label class="prompt-label" for="speaker-label">Ton pseudonyme</label>
+        <input
+          id="speaker-label"
+          v-model="speakerLabelInput"
+          type="text"
+          maxlength="60"
+          placeholder="Voix-0000"
+        />
+        <div class="onboarding-actions">
+          <button class="button" type="button" @click="confirmIdentity">Continuer</button>
+        </div>
+      </section>
+    </main>
+
+    <template v-else>
     <header>
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">F</span>
@@ -569,6 +1247,20 @@ onBeforeUnmount(() => {
     </header>
 
     <main v-if="activeScreen === 'home'" class="welcome-screen">
+      <button
+        v-if="canInstall && !installed"
+        class="install-banner"
+        type="button"
+        @click="handleInstallClick"
+      >
+        <span class="install-banner-icon" aria-hidden="true">⇩</span>
+        <span class="install-banner-copy">
+          <strong>Installer Le carnet des voix</strong>
+          <small>Ajoute l'application à ton écran d'accueil, utilisable même hors connexion.</small>
+        </span>
+        <span class="install-banner-arrow" aria-hidden="true">→</span>
+      </button>
+      <p v-if="installStatus" class="install-status" role="status">{{ installStatus }}</p>
       <section class="welcome-hero">
         <span class="eyebrow">Une aventure à travers le Bénin</span>
         <h1>Fais entendre ta voix.</h1>
@@ -611,10 +1303,26 @@ onBeforeUnmount(() => {
           <b>Participer <span aria-hidden="true">→</span></b>
         </span>
       </button>
+      <button class="welcome-action" type="button" @click="activeScreen = 'assistant'">
+        <span class="welcome-action-icon" aria-hidden="true">◈</span>
+        <span class="welcome-action-copy">
+          <strong>Parler avec l'assistant</strong>
+          <small>Pose une question à voix haute et écoute la réponse en fon.</small>
+          <b>Ouvrir l'assistant <span aria-hidden="true">→</span></b>
+        </span>
+      </button>
+      <button class="welcome-action" type="button" @click="activeScreen = 'collecte'">
+        <span class="welcome-action-icon" aria-hidden="true">Aa</span>
+        <span class="welcome-action-copy">
+          <strong>Proposer une phrase</strong>
+          <small>Écris une traduction en fon et, si tu le souhaites, enregistre ta voix.</small>
+          <b>Contribuer <span aria-hidden="true">→</span></b>
+        </span>
+      </button>
       <p class="welcome-note">Tes propositions restent facultatives et ne sont pas automatiquement vérifiées.</p>
     </main>
 
-    <main v-else>
+    <main v-else-if="activeScreen === 'game'">
       <section v-if="!isComplete" class="chapter-intro">
         <div class="chapter-title-row">
           <div>
@@ -1046,6 +1754,210 @@ onBeforeUnmount(() => {
         avec les communautés concernées.
       </p>
     </main>
+
+    <main v-else-if="activeScreen === 'assistant'" class="assistant-screen">
+      <section class="card assistant-card">
+        <div class="assistant-head">
+          <span class="eyebrow">Prototype vocal</span>
+          <h1>Parle, j'écoute.</h1>
+          <label class="assistant-language">
+            <span>Langue parlée</span>
+            <select v-model="assistantLanguage">
+              <option value="Français">Français</option>
+              <option value="Fon">Fon</option>
+            </select>
+          </label>
+        </div>
+        <div class="guide-halo">
+          <div
+            class="guide"
+            :data-state="assistantGuideState"
+            role="img"
+            aria-label="Guide souriant, un homme en tenue colorée qui vous accueille"
+          >
+            <svg viewBox="0 0 240 330" aria-hidden="true">
+              <ellipse cx="119" cy="317" rx="88" ry="9" fill="#101435" opacity=".18"/>
+              <path d="M39 319c5-43 19-69 49-82l30-8 31 8c29 11 47 39 53 82Z" fill="#1c2670"/>
+              <path d="M49 285l17-18 17 18-17 18Zm59-25 13-14 14 14-14 14Zm54 28 17-18 17 18-17 18Z" fill="#d3234b"/>
+              <circle cx="92" cy="280" r="7" fill="#f5b800"/><circle cx="145" cy="302" r="7" fill="#0f8a4f"/>
+              <circle cx="188" cy="274" r="6" fill="#f5b800"/><circle cx="105" cy="311" r="5" fill="#0f8a4f"/>
+              <path d="M97 216h45v38q-21 17-45 0Z" fill="#75482e"/>
+              <path d="M55 250q23-19 48-23l17 20 17-20q28 4 52 23l-22 26-9-13v56H57v-56l-10 13-16-16Z" fill="#f5b800"/>
+              <path d="M61 253q19-16 40-20l19 20 19-20q23 4 42 20l-19 23-10-12v52H71v-52l-10 12-12-13Z" fill="#1c2670"/>
+              <path d="m88 244 9 10-10 10-10-10Zm59 24 9 10-10 10-10-10Zm-45 27 7 8-8 8-8-8Z" fill="#d3234b"/>
+              <circle cx="125" cy="241" r="4" fill="#f5b800"/><circle cx="174" cy="250" r="4" fill="#f5b800"/>
+              <path d="M104 239q21 19 42 0" fill="none" stroke="#f5b800" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="125" cy="257" r="4" fill="#f5b800"/>
+              <path d="M50 250q-15 18-17 38" fill="none" stroke="#75482e" stroke-width="16" stroke-linecap="round"/>
+              <circle cx="32" cy="291" r="9" fill="#75482e"/>
+              <g class="guide-arm">
+                <path d="M172 246q18-20 21-45l4-29" fill="none" stroke="#75482e" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M197 177q-8-2-8-10l1-17q0-5 4-5t4 5l1 10 2-17q1-5 5-4 4 0 3 6l-1 16 4-12q2-5 6-3 4 2 2 7l-4 15q-3 13-15 14Z" fill="#75482e"/>
+                <path d="M193 168q7 5 14 2" fill="none" stroke="#603a28" stroke-width="2" stroke-linecap="round"/>
+              </g>
+              <path d="M67 143Q56 111 64 84Q70 52 102 53Q144 43 171 64Q190 83 181 143L169 125Q163 100 139 94Q110 85 85 107L77 131Z" fill="#241713"/>
+              <ellipse cx="66" cy="157" rx="10" ry="15" fill="#75482e"/>
+              <ellipse cx="181" cy="157" rx="10" ry="15" fill="#75482e"/>
+              <ellipse cx="124" cy="151" rx="56" ry="67" fill="#8a5635"/>
+              <circle cx="66" cy="174" r="8" fill="#f5b800"/><circle cx="182" cy="174" r="8" fill="#f5b800"/>
+              <ellipse cx="101" cy="166" rx="13" ry="8" fill="#d96f68" opacity=".48"/>
+              <ellipse cx="148" cy="166" rx="13" ry="8" fill="#d96f68" opacity=".48"/>
+              <path d="M91 135q12-9 23 0m16 0q12-9 23 0" fill="none" stroke="#241713" stroke-width="5" stroke-linecap="round"/>
+              <ellipse cx="104" cy="148" rx="8" ry="10" fill="#fff"/><ellipse cx="141" cy="148" rx="8" ry="10" fill="#fff"/>
+              <circle cx="106" cy="149" r="4.5" fill="#241713"/><circle cx="139" cy="149" r="4.5" fill="#241713"/>
+              <circle cx="107" cy="147" r="1.5" fill="#fff"/><circle cx="140" cy="147" r="1.5" fill="#fff"/>
+              <path d="M123 151q-3 15 3 17" fill="none" stroke="#603a28" stroke-width="3" stroke-linecap="round"/>
+              <path d="M101 175q11-8 22 0 6-7 12 0 11-8 22 0l-4 7q-9 4-17-2-7 6-17 2-9 4-17-2Z" fill="#30201c"/>
+              <g class="guide-mouth">
+                <path d="M108 190q16 13 32 0-4 15-16 15t-16-15Z" fill="#54251f"/>
+                <path d="M111 191q13 8 26 0" fill="none" stroke="#f3b4a1" stroke-width="3" stroke-linecap="round"/>
+              </g>
+              <path d="M75 85q9-22 29-24m8-3 5-1m11 1 5 1m11 4 4 3" fill="none" stroke="#3b241d" stroke-width="5" stroke-linecap="round"/>
+              <circle cx="84" cy="71" r="3" fill="#3b241d"/><circle cx="98" cy="61" r="3" fill="#3b241d"/>
+            </svg>
+          </div>
+        </div>
+        <button
+          class="mic-button"
+          type="button"
+          :data-state="assistantRecording ? 'listening' : 'idle'"
+          :disabled="assistantMicDisabled"
+          @click="assistantRecording ? stopAssistantRecording() : startAssistantRecording()"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor"/>
+            <path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>{{ assistantMicLabel }}</span>
+        </button>
+        <div
+          class="progress-track"
+          :data-mode="assistantProgressMode"
+          role="progressbar"
+          aria-label="Progression de l'enregistrement et de la réponse"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
+          <div
+            class="progress-fill"
+            :style="{ width: (assistantProgressMode === 'indeterminate' ? 35 : assistantProgressValue) + '%' }"
+          ></div>
+        </div>
+        <p class="status" :data-state="assistantStatusState" role="status" aria-live="polite">
+          {{ assistantStatus }}
+        </p>
+        <button v-if="assistantShowReplay" class="button button-secondary" type="button" @click="playAssistantResponse">
+          Écouter la réponse
+        </button>
+      </section>
+      <section class="card assistant-transcript">
+        <h2>Ta parole</h2>
+        <p class="hint">Corrige la transcription si nécessaire.</p>
+        <label class="prompt-label" for="assistant-transcript">Transcription reconnue</label>
+        <textarea
+          id="assistant-transcript"
+          v-model="assistantTranscript"
+          rows="3"
+          placeholder="Ta phrase apparaîtra ici après la reconnaissance."
+        ></textarea>
+        <label class="prompt-label" for="assistant-answer">Réponse de l'assistant en fon</label>
+        <textarea
+          id="assistant-answer"
+          v-model="assistantAnswer"
+          rows="4"
+          placeholder="La réponse en fon apparaîtra ici. Tu peux la corriger."
+        ></textarea>
+        <audio
+          v-if="assistantResponseAudioUrl"
+          ref="assistantAudioEl"
+          :src="assistantResponseAudioUrl"
+          controls
+          preload="metadata"
+          @ended="onAssistantAudioEnded"
+        ></audio>
+        <div v-if="assistantContributionVisible" class="contribution-box">
+          <label class="consent">
+            <input v-model="assistantConsent" type="checkbox" />
+            <span>J'accepte de sauvegarder cet échange pour contribuer à l'amélioration des modèles.</span>
+          </label>
+          <p class="hint">
+            Audio et textes conservés sur le serveur du prototype. L'audio de réponse sera régénéré
+            après correction ; il est synthétique et ne sert pas de voix humaine cible pour le TTS.
+          </p>
+          <button
+            class="button"
+            type="button"
+            :disabled="!assistantConsent || assistantContributionSaved || assistantSaving"
+            @click="saveAssistantContribution"
+          >
+            {{ assistantContributionSaved ? "Contribution enregistrée" : assistantSaving ? "Enregistrement…" : "Enregistrer ma contribution" }}
+          </button>
+          <p class="status" :data-state="assistantContributionStatusState" role="status" aria-live="polite">
+            {{ assistantContributionStatus }}
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <main v-else-if="activeScreen === 'collecte'" class="collecte-screen">
+      <section class="card">
+        <span class="eyebrow">Collecte de phrases</span>
+        <h1>Partage une traduction et sa prononciation</h1>
+        <p class="story-copy">
+          Écris une phrase en français, sa traduction en fon, écoute la voix de l'IA puis enregistre
+          une voix humaine si tu le souhaites.
+        </p>
+        <label class="prompt-label" for="collecte-french">Phrase en français</label>
+        <textarea
+          id="collecte-french"
+          v-model="collecteFrench"
+          rows="2"
+          maxlength="500"
+          placeholder="Exemple : Bonjour, comment vas-tu ?"
+        ></textarea>
+        <label class="prompt-label" for="collecte-fon">Traduction en fon</label>
+        <textarea
+          id="collecte-fon"
+          v-model="collecteFon"
+          rows="3"
+          maxlength="500"
+          placeholder="Écris ici la traduction en fon."
+        ></textarea>
+        <div class="record-row">
+          <button class="button button-secondary" type="button" :disabled="collectePlaying" @click="playCollecteAiVoice">
+            ▶ Écouter la voix de l'IA
+          </button>
+          <button
+            class="button button-secondary"
+            type="button"
+            @click="collecteRecording ? stopCollecteRecording() : startCollecteRecording()"
+          >
+            {{ collecteRecording ? "■ Terminer l'enregistrement" : collecteHumanAudio ? "● Refaire mon enregistrement" : "● Enregistrer ma voix" }}
+          </button>
+        </div>
+        <audio v-if="collecteAiAudioUrl" ref="collecteAiAudioEl" :src="collecteAiAudioUrl" controls></audio>
+        <audio v-if="collecteHumanAudioUrl" :src="collecteHumanAudioUrl" controls></audio>
+        <p class="hint" role="status">{{ collecteRecordStatus }}</p>
+        <label class="consent">
+          <input v-model="collecteConsent" type="checkbox" />
+          <span>
+            J'accepte de sauvegarder ces textes et l'enregistrement de ma voix (s'il existe) pour
+            contribuer à l'amélioration des modèles.
+          </span>
+        </label>
+        <p class="hint">
+          Les données restent sur le serveur du prototype. La voix de l'IA est conservée pour
+          comparaison, mais seule ta lecture humaine peut servir de référence vocale pour entraîner
+          le TTS. Tu peux enregistrer la paire de textes sans ajouter d'audio humain.
+        </p>
+        <button class="button" type="button" :disabled="!canSaveCollecte" @click="saveCollecteContribution">
+          {{ collecteSaved ? "Contribution enregistrée" : collecteSaving ? "Enregistrement…" : "Enregistrer cette contribution" }}
+        </button>
+        <p class="status" :data-state="collecteSaveStatusState" role="status" aria-live="polite">
+          {{ collecteSaveStatus }}
+        </p>
+      </section>
+    </main>
     <nav class="phone-nav" aria-label="Navigation du jeu">
       <button
         class="phone-nav-item"
@@ -1067,6 +1979,24 @@ onBeforeUnmount(() => {
       </button>
       <button
         class="phone-nav-item"
+        :class="{ 'is-active': activeScreen === 'assistant' }"
+        type="button"
+        @click="activeScreen = 'assistant'"
+      >
+        <span aria-hidden="true">◈</span>
+        <span>Assistant</span>
+      </button>
+      <button
+        class="phone-nav-item"
+        :class="{ 'is-active': activeScreen === 'collecte' }"
+        type="button"
+        @click="activeScreen = 'collecte'"
+      >
+        <span aria-hidden="true">Aa</span>
+        <span>Collecte</span>
+      </button>
+      <button
+        class="phone-nav-item"
         :class="{ 'is-active': activeScreen === 'home' }"
         type="button"
         @click="showHome"
@@ -1075,5 +2005,6 @@ onBeforeUnmount(() => {
         <span>Accueil</span>
       </button>
     </nav>
+    </template>
   </div>
 </template>

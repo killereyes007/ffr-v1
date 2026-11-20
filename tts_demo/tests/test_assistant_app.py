@@ -214,21 +214,24 @@ class AssistantAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Le carnet des voix", response.text)
         asset_paths = re.findall(r'"/game-assets/([^"]+)"', response.text)
-        self.assertTrue(asset_paths)
+        js_asset_path = next(path for path in asset_paths if path.endswith(".js"))
         with TestClient(assistant_app.web_app) as client:
-            asset_response = client.get(f"/game-assets/{asset_paths[0]}")
+            asset_response = client.get(f"/game-assets/{js_asset_path}")
 
         self.assertEqual(asset_response.status_code, 200)
         self.assertIn("javascript", asset_response.headers["content-type"])
         self.assertTrue(asset_response.content)
 
-    def test_home_page_uses_game_branding(self):
+    def test_home_page_presents_project_vision_and_prototype_paths(self):
         with TestClient(assistant_app.web_app) as client:
             response = client.get("/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("Le fon mérite d’être", response.text)
+        self.assertIn("Pourquoi FFR ?", response.text)
+        self.assertIn("Comprendre. Traduire. Faire entendre.", response.text)
         self.assertIn("Le carnet des voix", response.text)
-        self.assertIn("Bénin · une aventure en fon", response.text)
+        self.assertIn("Découvrir l’assistant", response.text)
 
     def test_game_contribution_requires_human_audio(self):
         with TestClient(assistant_app.web_app) as client:

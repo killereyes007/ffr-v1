@@ -50,662 +50,6 @@ MAX_TRAINING_REQUEST_BYTES = 18_000_000
 GAME_FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
 
 
-MICROPHONE_JS = r"""() => {
-    const landing = document.querySelector("#fon-landing");
-    const chatScreen = document.querySelector("#fon-chat-screen");
-    const trainingScreen = document.querySelector("#fon-training-screen");
-    const showScreen = (screen) => {
-        landing.hidden = screen !== "home";
-        chatScreen.hidden = screen !== "chat";
-        trainingScreen.hidden = screen !== "training";
-        window.scrollTo({ top: 0, behavior: "smooth" });
-    };
-    document.querySelectorAll("[data-open-chat]").forEach((button) => {
-        button.addEventListener("click", () => showScreen("chat"));
-    });
-    document.querySelector("#fon-open-training")?.addEventListener(
-        "click", () => showScreen("training")
-    );
-    document.querySelectorAll("[data-go-home]").forEach((button) => {
-        button.addEventListener("click", () => showScreen("home"));
-    });
-
-    const startButton = document.querySelector("#fon-mic-start");
-    const micLabel = document.querySelector("#fon-mic-label");
-    const status = document.querySelector("#fon-mic-status");
-    const transcript = document.querySelector("#fon-transcript");
-    const answer = document.querySelector("#fon-answer");
-    const guide = document.querySelector("#fon-guide");
-    const replayButton = document.querySelector("#fon-replay");
-    const responseAudio = document.querySelector("#fon-response-audio");
-    const language = document.querySelector("#source-language");
-    const contribution = document.querySelector("#fon-contribution");
-    const consent = document.querySelector("#fon-collection-consent");
-    const saveButton = document.querySelector("#fon-save-contribution");
-    const contributionStatus = document.querySelector("#fon-contribution-status");
-    const frenchText = document.querySelector("#training-french");
-    const fonText = document.querySelector("#training-fon");
-    const trainingPlayButton = document.querySelector("#training-play");
-    const trainingRecordButton = document.querySelector("#training-record");
-    const trainingRecordStatus = document.querySelector("#training-record-status");
-    const trainingAudio = document.querySelector("#training-audio");
-    const trainingConsent = document.querySelector("#training-consent");
-    const trainingSaveButton = document.querySelector("#training-save");
-    const trainingSaveStatus = document.querySelector("#training-save-status");
-    if (!startButton || !micLabel || !status || !transcript || !answer || !guide ||
-        !replayButton || !responseAudio || !language || !contribution ||
-        !consent || !saveButton || !contributionStatus || !frenchText || !fonText ||
-        !trainingPlayButton || !trainingRecordButton || !trainingRecordStatus ||
-        !trainingAudio || !trainingConsent || !trainingSaveButton || !trainingSaveStatus) return;
-
-    let stream;
-    let audioContext;
-    let source;
-    let processor;
-    let silentOutput;
-    let chunks = [];
-    let progressTimer;
-    let recordingStartedAt;
-    let lastSpeechAt;
-    let hasDetectedSpeech = false;
-    let recordingActive = false;
-    let stageStartedAt;
-    let stageTimer;
-    let responseAudioUrl;
-    let lastInputWav;
-    let rawInputTranscript = "";
-    let rawAssistantFonText = "";
-    let contributionSaved = false;
-    let trainingStream;
-    let trainingAudioContext;
-    let trainingSource;
-    let trainingProcessor;
-    let trainingChunks = [];
-    let trainingHumanAudio;
-    let trainingSynthesizedAudio;
-    let trainingAudioUrl;
-    let trainingRecording = false;
-    let trainingSaveInProgress = false;
-    let trainingPhraseSaved = false;
-    const conversationId = sessionStorage.fonConversationId ||
-        (sessionStorage.fonConversationId = crypto.randomUUID());
-
-    const progressTrack = document.querySelector("#fon-progress-track");
-    const progressFill = document.querySelector("#fon-progress-fill");
-    const setStatus = (message, kind = "info") => {
-        status.textContent = message;
-        status.dataset.state = kind;
-    };
-    const setGuideState = (state) => {
-        guide.dataset.state = state;
-    };
-    const setMicLabel = (label, state) => {
-        micLabel.textContent = label;
-        startButton.dataset.state = state;
-        startButton.setAttribute("aria-label", label);
-    };
-    const setContributionVisible = (visible) => {
-        contribution.hidden = !visible;
-        if (!visible) {
-            contributionSaved = false;
-            consent.checked = false;
-            saveButton.disabled = true;
-            saveButton.textContent = "Enregistrer ma contribution";
-            contributionStatus.textContent = "";
-            contributionStatus.dataset.state = "info";
-        }
-    };
-    const setProgress = (mode, value = 0) => {
-        progressTrack.dataset.mode = mode;
-        if (mode === "indeterminate" || mode === "error" || mode === "hidden") {
-            progressTrack.removeAttribute("aria-valuenow");
-        } else {
-            progressTrack.setAttribute("aria-valuenow", String(value));
-        }
-        progressFill.style.width = `${value}%`;
-    };
-    const stopProgressTimer = () => {
-        clearInterval(progressTimer);
-        progressTimer = undefined;
-    };
-    const stopStageTimer = () => {
-        clearInterval(stageTimer);
-        stageTimer = undefined;
-    };
-    const stopTracks = () => {
-        if (stream) stream.getTracks().forEach((track) => track.stop());
-        stream = undefined;
-    };
-    const updateStage = (message) => {
-        stopStageTimer();
-        setStatus(message);
-        setGuideState("processing");
-        const stages = [
-            ["Chargement du modèle de reconnaissance", "Chargement du modèle"],
-            ["Chargement de l'adaptateur de langue", "Chargement de l'adaptateur"],
-            ["Analyse de la parole en cours", "Analyse de la parole"],
-            ["Finalisation du texte reconnu", "Finalisation du texte"],
-            ["Génération de la réponse", "Génération de la réponse"],
-            ["Synthèse vocale de la réponse", "Synthèse de la voix"],
-        ];
-        const activeStage = stages.find(([prefix]) => message.startsWith(prefix));
-        if (!activeStage) return;
-
-        stageStartedAt = performance.now();
-        stageTimer = setInterval(() => {
-            const elapsedSeconds = Math.floor(
-                (performance.now() - stageStartedAt) / 1000
-            );
-            setStatus(`${activeStage[1]}… (${elapsedSeconds} s)`);
-        }, 1000);
-    };
-    const encodeWav = (samples, sampleRate) => {
-        const frameCount = samples.reduce((total, chunk) => total + chunk.length, 0);
-        const buffer = new ArrayBuffer(44 + frameCount * 2);
-        const view = new DataView(buffer);
-        const writeText = (offset, text) => {
-            for (let index = 0; index < text.length; index += 1) {
-                view.setUint8(offset + index, text.charCodeAt(index));
-            }
-        };
-        writeText(0, "RIFF");
-        view.setUint32(4, buffer.byteLength - 8, true);
-        writeText(8, "WAVE");
-        writeText(12, "fmt ");
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, 1, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * 2, true);
-        view.setUint16(32, 2, true);
-        view.setUint16(34, 16, true);
-        writeText(36, "data");
-        view.setUint32(40, frameCount * 2, true);
-        let offset = 44;
-        for (const chunk of samples) {
-            for (const sample of chunk) {
-                const clipped = Math.max(-1, Math.min(1, sample));
-                view.setInt16(
-                    offset,
-                    clipped < 0 ? clipped * 32768 : clipped * 32767,
-                    true
-                );
-                offset += 2;
-            }
-        }
-        return new Blob([buffer], { type: "audio/wav" });
-    };
-    const encodeBase64 = async (blob) => {
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        let binary = "";
-        for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-            binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-        }
-        return btoa(binary);
-    };
-    const setTrainingStatus = (element, message, kind = "info") => {
-        element.textContent = message;
-        element.dataset.state = kind;
-    };
-    const stopTrainingRecording = async () => {
-        if (!trainingRecording) return;
-        trainingRecording = false;
-        trainingRecordButton.disabled = true;
-        try {
-            trainingProcessor.disconnect();
-            trainingSource.disconnect();
-            const sampleRate = trainingAudioContext.sampleRate;
-            await trainingAudioContext.close();
-            trainingAudioContext = undefined;
-            trainingStream.getTracks().forEach((track) => track.stop());
-            trainingStream = undefined;
-            trainingHumanAudio = encodeWav(trainingChunks, sampleRate);
-            trainingChunks = [];
-            trainingRecordButton.textContent = "● Refaire mon enregistrement";
-            setTrainingStatus(trainingRecordStatus, "Ta prononciation est prête à être enregistrée avec ton consentement.", "success");
-        } catch (error) {
-            setTrainingStatus(trainingRecordStatus, `Erreur d'enregistrement : ${error.message}`, "error");
-        } finally {
-            trainingRecordButton.disabled = false;
-        }
-    };
-    trainingPlayButton.addEventListener("click", async () => {
-        const text = fonText.value.trim();
-        if (!text) {
-            setTrainingStatus(trainingRecordStatus, "Saisis d'abord une traduction en fon.", "error");
-            fonText.focus();
-            return;
-        }
-        trainingPlayButton.disabled = true;
-        trainingPlayButton.textContent = "Synthèse en cours…";
-        setTrainingStatus(trainingRecordStatus, "Préparation de la lecture…");
-        try {
-            const response = await fetch("/training-synthesis", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fon_text: text }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.detail || "La synthèse n'a pas pu être générée.");
-            trainingSynthesizedAudio = result.audio;
-            const audioBytes = Uint8Array.from(
-                atob(result.audio), (character) => character.charCodeAt(0)
-            );
-            if (trainingAudioUrl) URL.revokeObjectURL(trainingAudioUrl);
-            trainingAudioUrl = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
-            trainingAudio.src = trainingAudioUrl;
-            trainingAudio.hidden = false;
-            await trainingAudio.play();
-            setTrainingStatus(trainingRecordStatus, "Lecture de la traduction en fon.");
-        } catch (error) {
-            setTrainingStatus(trainingRecordStatus, `Erreur : ${error.message}`, "error");
-        } finally {
-            trainingPlayButton.disabled = false;
-            trainingPlayButton.textContent = "▶ Écouter la voix de l'IA";
-        }
-    });
-    trainingRecordButton.addEventListener("click", async () => {
-        if (trainingRecording) {
-            await stopTrainingRecording();
-            return;
-        }
-        trainingRecordButton.disabled = true;
-        setTrainingStatus(trainingRecordStatus, "Connexion au microphone…");
-        try {
-            trainingStream = await navigator.mediaDevices.getUserMedia({
-                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-            });
-            trainingAudioContext = new AudioContext();
-            await trainingAudioContext.resume();
-            trainingSource = trainingAudioContext.createMediaStreamSource(trainingStream);
-            trainingProcessor = trainingAudioContext.createScriptProcessor(4096, 1, 1);
-            const silentOutput = trainingAudioContext.createGain();
-            silentOutput.gain.value = 0;
-            trainingChunks = [];
-            trainingHumanAudio = undefined;
-            trainingProcessor.onaudioprocess = (event) => {
-                trainingChunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
-            };
-            trainingSource.connect(trainingProcessor);
-            trainingProcessor.connect(silentOutput);
-            silentOutput.connect(trainingAudioContext.destination);
-            trainingRecording = true;
-            trainingRecordButton.textContent = "■ Terminer l'enregistrement";
-            setTrainingStatus(trainingRecordStatus, "Enregistrement… lis la phrase en fon, puis termine l'enregistrement.");
-            setTimeout(() => {
-                if (trainingRecording) {
-                    setTrainingStatus(trainingRecordStatus, "Limite de 30 secondes atteinte. Finalisation de l'enregistrement.");
-                    void stopTrainingRecording();
-                }
-            }, 30_000);
-        } catch (error) {
-            if (trainingStream) trainingStream.getTracks().forEach((track) => track.stop());
-            trainingStream = undefined;
-            if (trainingAudioContext) await trainingAudioContext.close();
-            trainingAudioContext = undefined;
-            setTrainingStatus(trainingRecordStatus, `Impossible d'accéder au micro : ${error.message}`, "error");
-        } finally {
-            trainingRecordButton.disabled = false;
-        }
-    });
-    trainingConsent.addEventListener("change", () => {
-        trainingSaveButton.disabled =
-            !trainingConsent.checked || trainingSaveInProgress || trainingPhraseSaved;
-    });
-    for (const field of [frenchText, fonText]) {
-        field.addEventListener("input", () => {
-            trainingSaveStatus.textContent = "";
-            trainingPhraseSaved = false;
-            trainingSaveButton.textContent = "Enregistrer cette contribution";
-            trainingSaveButton.disabled = !trainingConsent.checked || trainingSaveInProgress;
-            trainingHumanAudio = undefined;
-            trainingRecordButton.textContent = "● Enregistrer ma voix";
-            if (field === fonText) {
-                trainingSynthesizedAudio = undefined;
-                trainingAudio.pause();
-                trainingAudio.removeAttribute("src");
-                trainingAudio.hidden = true;
-                setTrainingStatus(
-                    trainingRecordStatus,
-                    "La traduction a changé. Génère sa lecture ou enregistre à nouveau ta prononciation."
-                );
-            } else {
-                setTrainingStatus(
-                    trainingRecordStatus,
-                    "La phrase française a changé. Enregistre à nouveau ta prononciation si tu souhaites l'associer à ces textes."
-                );
-            }
-        });
-    }
-    trainingSaveButton.addEventListener("click", async () => {
-        const french = frenchText.value.trim();
-        const fon = fonText.value.trim();
-        if (!trainingConsent.checked || trainingSaveInProgress) return;
-        if (!french || !fon) {
-            setTrainingStatus(trainingSaveStatus, "Renseigne la phrase française et sa traduction en fon.", "error");
-            return;
-        }
-        trainingSaveInProgress = true;
-        trainingSaveButton.disabled = true;
-        setTrainingStatus(trainingSaveStatus, "Enregistrement local de la contribution…");
-        try {
-            const response = await fetch("/training-phrases", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    consent: trainingConsent.checked,
-                    french_text: french,
-                    fon_text: fon,
-                    human_audio: trainingHumanAudio ? await encodeBase64(trainingHumanAudio) : null,
-                    synthesized_audio: trainingSynthesizedAudio || null,
-                }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.detail || "La contribution n'a pas pu être enregistrée.");
-            trainingPhraseSaved = true;
-            setTrainingStatus(trainingSaveStatus, `Contribution enregistrée sur cet ordinateur (référence ${result.sample_id}).`, "success");
-            trainingSaveButton.textContent = "Contribution enregistrée";
-            const bytes = Uint8Array.from(atob(result.synthesized_audio), (character) => character.charCodeAt(0));
-            if (trainingAudioUrl) URL.revokeObjectURL(trainingAudioUrl);
-            trainingAudioUrl = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
-            trainingAudio.src = trainingAudioUrl;
-            trainingAudio.hidden = false;
-        } catch (error) {
-            setTrainingStatus(trainingSaveStatus, `Erreur : ${error.message}`, "error");
-        } finally {
-            trainingSaveInProgress = false;
-            trainingSaveButton.disabled =
-                !trainingConsent.checked || trainingPhraseSaved;
-        }
-    });
-    const playResponse = async () => {
-        replayButton.hidden = true;
-        setGuideState("speaking");
-        setMicLabel("Je parle…", "speaking");
-        try {
-            await responseAudio.play();
-            setStatus("Réponse en fon en cours…");
-        } catch (_error) {
-            setGuideState("idle");
-            setMicLabel("Parler", "idle");
-            replayButton.hidden = false;
-            startButton.disabled = false;
-            setStatus("La réponse est prête. Clique sur « Écouter la réponse ».");
-        }
-    };
-    replayButton.addEventListener("click", playResponse);
-    consent.addEventListener("change", () => {
-        saveButton.disabled = !consent.checked || contributionSaved;
-    });
-    saveButton.addEventListener("click", async () => {
-        if (!consent.checked || !lastInputWav || contributionSaved) return;
-        const correctedTranscript = transcript.value.trim();
-        const correctedAnswer = answer.value.trim();
-        if (!correctedTranscript || !correctedAnswer) {
-            contributionStatus.textContent =
-                "La transcription et la réponse en fon doivent toutes les deux être renseignées.";
-            contributionStatus.dataset.state = "error";
-            return;
-        }
-
-        saveButton.disabled = true;
-        contributionStatus.textContent = "Enregistrement local de la contribution…";
-        contributionStatus.dataset.state = "info";
-        try {
-            const response = await fetch("/training-examples", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    consent: consent.checked,
-                    language: language.value,
-                    input_audio: await encodeBase64(lastInputWav),
-                    asr_transcript: rawInputTranscript,
-                    input_transcript: correctedTranscript,
-                    assistant_fon_text_original: rawAssistantFonText,
-                    assistant_fon_text: correctedAnswer,
-                }),
-            });
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.detail || "La contribution n'a pas pu être enregistrée.");
-            }
-
-            contributionSaved = true;
-            saveButton.textContent = "Contribution enregistrée";
-            contributionStatus.textContent =
-                `Enregistrée sur cet ordinateur (référence ${result.sample_id}).`;
-            contributionStatus.dataset.state = "success";
-
-            const audioBytes = Uint8Array.from(
-                atob(result.assistant_audio),
-                (character) => character.charCodeAt(0)
-            );
-            if (responseAudioUrl) URL.revokeObjectURL(responseAudioUrl);
-            responseAudioUrl = URL.createObjectURL(
-                new Blob([audioBytes], { type: "audio/wav" })
-            );
-            responseAudio.src = responseAudioUrl;
-            replayButton.hidden = false;
-        } catch (error) {
-            saveButton.disabled = false;
-            contributionStatus.textContent = `Erreur : ${error.message}`;
-            contributionStatus.dataset.state = "error";
-        }
-    });
-    responseAudio.addEventListener("play", () => {
-        setGuideState("speaking");
-        setMicLabel("Je parle…", "speaking");
-    });
-    responseAudio.addEventListener("ended", () => {
-        startButton.disabled = false;
-        setMicLabel("Parler", "idle");
-        setGuideState("idle");
-        setStatus("À toi de parler.");
-    });
-
-    const stopRecording = async () => {
-        if (!recordingActive) return;
-        recordingActive = false;
-        startButton.disabled = true;
-        stopProgressTimer();
-        setMicLabel("Envoi…", "processing");
-        setGuideState("processing");
-        try {
-            processor.disconnect();
-            source.disconnect();
-            silentOutput.disconnect();
-            const sampleRate = audioContext.sampleRate;
-            await audioContext.close();
-            audioContext = undefined;
-            stopTracks();
-
-            if (!hasDetectedSpeech) {
-                chunks = [];
-                startButton.disabled = false;
-                setMicLabel("Parler", "idle");
-                setGuideState("idle");
-                setProgress("hidden");
-                setStatus("Je n'ai pas détecté de parole. Réessaie en parlant près du micro.", "error");
-                return;
-            }
-
-            const wav = encodeWav(chunks, sampleRate);
-            chunks = [];
-            lastInputWav = wav;
-            setProgress("indeterminate");
-            setStatus("Transcription locale en cours…");
-            const response = await fetch(
-                `/voice-turn?language=${encodeURIComponent(language.value)}`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "audio/wav",
-                        "X-Conversation-Id": conversationId,
-                    },
-                    body: wav,
-                }
-            );
-            if (!response.ok) {
-                const errorResult = await response.json();
-                throw new Error(errorResult.detail || "L'échange vocal a échoué.");
-            }
-            if (!response.body) throw new Error("Le serveur n'a pas démarré l'échange vocal.");
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-            let completedTurn = false;
-            const handleEvent = (event) => {
-                if (event.type === "progress") {
-                    updateStage(event.message);
-                } else if (event.type === "transcript") {
-                    rawInputTranscript = event.text;
-                    transcript.value = event.text;
-                    updateStage("Transcription terminée. Envoi au modèle…");
-                } else if (event.type === "done") {
-                    completedTurn = true;
-                    stopStageTimer();
-                    rawAssistantFonText = event.fon_answer;
-                    answer.value = event.fon_answer;
-                    const audioBytes = Uint8Array.from(
-                        atob(event.audio), (character) => character.charCodeAt(0)
-                    );
-                    responseAudioUrl = URL.createObjectURL(
-                        new Blob([audioBytes], { type: "audio/wav" })
-                    );
-                    responseAudio.src = responseAudioUrl;
-                    setProgress("complete", 100);
-                    setContributionVisible(true);
-                    playResponse();
-                } else if (event.type === "error") {
-                    throw new Error(event.message);
-                }
-            };
-            while (true) {
-                const { value, done } = await reader.read();
-                buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-                const messages = buffer.split("\n\n");
-                buffer = messages.pop() || "";
-                for (const message of messages) {
-                    const dataLine = message.split("\n").find((line) => line.startsWith("data:"));
-                    if (dataLine) handleEvent(JSON.parse(dataLine.slice(5).trim()));
-                }
-                if (done) break;
-            }
-            if (buffer.startsWith("data:")) handleEvent(JSON.parse(buffer.slice(5).trim()));
-            if (!completedTurn) throw new Error("L'assistant n'a pas terminé sa réponse.");
-        } catch (error) {
-            stopStageTimer();
-            setGuideState("idle");
-            setMicLabel("Parler", "idle");
-            setProgress("error");
-            setStatus(`Erreur : ${error.message}`, "error");
-            startButton.disabled = false;
-        } finally {
-            stopStageTimer();
-        }
-    };
-
-    startButton.addEventListener("click", async () => {
-        if (recordingActive) {
-            await stopRecording();
-            return;
-        }
-        startButton.disabled = true;
-        responseAudio.pause();
-        setGuideState("idle");
-        setMicLabel("Connexion…", "processing");
-        setContributionVisible(false);
-        lastInputWav = undefined;
-        rawInputTranscript = "";
-        rawAssistantFonText = "";
-        if (responseAudioUrl) URL.revokeObjectURL(responseAudioUrl);
-        responseAudioUrl = undefined;
-        responseAudio.removeAttribute("src");
-        setProgress("hidden");
-        transcript.value = "";
-        answer.value = "";
-        transcript.placeholder = "La transcription reconnue apparaîtra ici.";
-        answer.placeholder = "La réponse en fon apparaîtra ici.";
-        contributionStatus.textContent = "";
-        setStatus("Connexion au microphone…");
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                },
-            });
-            audioContext = new AudioContext();
-            await audioContext.resume();
-            source = audioContext.createMediaStreamSource(stream);
-            processor = audioContext.createScriptProcessor(4096, 1, 1);
-            silentOutput = audioContext.createGain();
-            silentOutput.gain.value = 0;
-            chunks = [];
-            processor.onaudioprocess = (event) => {
-                const samples = new Float32Array(event.inputBuffer.getChannelData(0));
-                chunks.push(samples);
-                let energy = 0;
-                for (const sample of samples) energy += sample * sample;
-                const rms = Math.sqrt(energy / samples.length);
-                if (rms >= 0.018) {
-                    if (!hasDetectedSpeech) {
-                        setStatus("Parole détectée. L'envoi se fera après une courte pause.");
-                    }
-                    hasDetectedSpeech = true;
-                    lastSpeechAt = performance.now();
-                }
-            };
-            source.connect(processor);
-            processor.connect(silentOutput);
-            silentOutput.connect(audioContext.destination);
-            recordingStartedAt = performance.now();
-            lastSpeechAt = undefined;
-            hasDetectedSpeech = false;
-            recordingActive = true;
-            setProgress("recording", 0);
-            setGuideState("listening");
-            setMicLabel("Je t'écoute…", "listening");
-            startButton.disabled = false;
-            setStatus("Parle normalement. J'enverrai après 1,5 seconde de silence.");
-            progressTimer = setInterval(() => {
-                const elapsedSeconds = Math.min(
-                    30,
-                    (performance.now() - recordingStartedAt) / 1000
-                );
-                const elapsedPercent = (elapsedSeconds / 30) * 100;
-                setProgress("recording", elapsedPercent);
-                if (
-                    hasDetectedSpeech &&
-                    lastSpeechAt &&
-                    performance.now() - lastSpeechAt >= 1500
-                ) {
-                    setStatus("Silence détecté. Envoi de ta phrase…");
-                    void stopRecording();
-                    return;
-                }
-                if (elapsedSeconds >= 30) {
-                    setStatus("Limite de 30 secondes atteinte. Envoi de ta phrase…");
-                    void stopRecording();
-                    return;
-                }
-            }, 100);
-        } catch (error) {
-            stopProgressTimer();
-            stopTracks();
-            if (audioContext) await audioContext.close();
-            audioContext = undefined;
-            startButton.disabled = false;
-            setMicLabel("Parler", "idle");
-            setGuideState("idle");
-            setProgress("hidden");
-            setStatus(`Impossible d'accéder au micro : ${error.message}`, "error");
-        }
-    });
-}"""
-
 
 def process_voice_turn(audio, language, history, client, emit_event):
     transcription = transcribe_audio(
@@ -719,6 +63,15 @@ def process_voice_turn(audio, language, history, client, emit_event):
     emit_event({"type": "progress", "message": "Synthèse vocale de la réponse…"})
     response_audio = synthesize(turn.fon_answer)
     return transcription, turn, response_audio
+
+
+def wav_duration_seconds(raw_wav_bytes: bytes) -> float:
+    with wave.open(io.BytesIO(raw_wav_bytes), "rb") as wav_file:
+        frames = wav_file.getnframes()
+        framerate = wav_file.getframerate()
+        if not framerate:
+            return 0.0
+        return round(frames / framerate, 3)
 
 
 def encode_audio_wav(audio) -> str:
@@ -744,6 +97,8 @@ def persist_training_example(
     input_transcript,
     assistant_fon_text_original,
     fon_answer,
+    speaker_id=None,
+    speaker_label=None,
 ):
     DATASET_DIR.mkdir(parents=True, exist_ok=True)
     sample_id = str(uuid.uuid4())
@@ -754,15 +109,19 @@ def persist_training_example(
         "sample_id": sample_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "consent": True,
+        "speaker_id": speaker_id,
+        "speaker_label": speaker_label,
         "input_language": language,
         "asr_transcript": asr_transcript,
         "input_transcript": input_transcript,
         "input_audio_file": "input_audio.wav",
         "input_audio_role": "user_recording_for_asr",
+        "input_audio_duration_seconds": wav_duration_seconds(audio_data),
         "assistant_fon_text_original": assistant_fon_text_original,
         "assistant_fon_text": fon_answer,
         "assistant_audio_file": "assistant_audio.wav",
         "assistant_audio_role": "ai_synthesized_for_quality_review_not_human_tts_target",
+        "assistant_audio_duration_seconds": wav_duration_seconds(response_audio_bytes),
         "asr_model": ASR_MODEL_ID,
         "tts_model": MODEL_ID,
     }
@@ -789,6 +148,8 @@ def persist_training_phrase(
     mission_id=None,
     mission_title=None,
     generate_synthesis=True,
+    speaker_id=None,
+    speaker_label=None,
 ):
     phrase_dir = DATASET_DIR / "phrase-pairs"
     phrase_dir.mkdir(parents=True, exist_ok=True)
@@ -807,6 +168,8 @@ def persist_training_phrase(
         "sample_id": sample_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "consent": True,
+        "speaker_id": speaker_id,
+        "speaker_label": speaker_label,
         "contribution_source": contribution_source,
         "review_status": "unreviewed",
         "mission_id": mission_id,
@@ -821,8 +184,14 @@ def persist_training_phrase(
             if synthesized_audio
             else None
         ),
+        "synthesized_audio_duration_seconds": (
+            wav_duration_seconds(synthesized_audio) if synthesized_audio else None
+        ),
         "human_audio_file": "fon_human_reading.wav" if human_audio else None,
         "human_audio_role": human_audio_role,
+        "human_audio_duration_seconds": (
+            wav_duration_seconds(human_audio) if human_audio else None
+        ),
         "tts_model": MODEL_ID if synthesized_audio else None,
     }
 
@@ -846,266 +215,161 @@ def persist_training_phrase(
     return sample_id, encoded_synthesis
 
 
-with gr.Blocks(title="Le carnet des voix — aventure en fon") as demo:
+FONT_HEAD_TAGS = """
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+  rel="stylesheet"
+/>
+"""
+
+
+with gr.Blocks(title="FFR — Fon, français et voix") as demo:
     gr.HTML(
         """
         <div id="fon-landing" class="fon-landing">
-          <div class="fon-landing-brand">
-            <span class="fon-brand-mark" aria-hidden="true">F</span>
-            <div><strong>Le carnet des voix</strong><span>Bénin · une aventure en fon</span></div>
-          </div>
-          <div class="fon-landing-content">
+          <header class="fon-site-header">
+            <a class="fon-site-brand" href="/" aria-label="FFR — accueil">
+              <span class="fon-site-mark" aria-hidden="true">F</span>
+              <span><strong>FFR</strong><small>Fon · français · voix</small></span>
+            </a>
+            <nav class="fon-site-nav" aria-label="Navigation principale">
+              <a href="#vision">Notre vision</a>
+              <a href="#demarche">Notre démarche</a>
+              <a href="/game">Le carnet des voix</a>
+              <a class="fon-site-nav-cta" href="/game?screen=assistant">Essayer le prototype <span aria-hidden="true">↗</span></a>
+            </nav>
+          </header>
+          <main class="fon-landing-content">
             <section class="fon-landing-hero">
               <div class="fon-landing-copy">
-                <span class="fon-eyebrow">Une aventure autour du fon</span>
-                <h1>Fais entendre ta voix.</h1>
-                <p>Joue, échange avec l'assistant ou contribue à faire grandir les ressources en fon.</p>
+                <span class="fon-eyebrow"><span class="fon-eyebrow-dot"></span> Un projet de recherche et de création au Bénin</span>
+                <h1>Le fon mérite d’être <em>entendu.</em></h1>
+                <p>FFR explore comment la technologie peut rapprocher le fon et le français — par la traduction, la voix et des ressources construites avec soin.</p>
+                <div class="fon-hero-actions">
+                  <a class="fon-primary-action" href="/game?screen=assistant">Découvrir l’assistant <span aria-hidden="true">↗</span></a>
+                  <a class="fon-secondary-action" href="#vision">Découvrir le projet <span aria-hidden="true">↓</span></a>
+                </div>
+                <p class="fon-hero-note"><span aria-hidden="true">◉</span> Un prototype en évolution, pas encore un service de traduction certifié.</p>
               </div>
               <div class="fon-landing-art" aria-hidden="true">
-                <span class="fon-art-sun"></span>
-                <span class="fon-art-hill fon-art-hill-back"></span>
-                <span class="fon-art-hill fon-art-hill-front"></span>
-                <div class="fon-art-tower">
-                  <span class="fon-art-tower-mast"></span>
-                  <span class="fon-art-tower-cross"></span>
-                  <span class="fon-art-wave fon-art-wave-one"></span>
-                  <span class="fon-art-wave fon-art-wave-two"></span>
-                </div>
-                <div class="fon-art-station">
-                  <span class="fon-art-sign">FON FM</span>
-                  <span class="fon-art-window"></span>
-                  <span class="fon-art-door"></span>
-                </div>
-                <div class="fon-art-radio">
-                  <span>EN DIRECT</span>
-                  <div class="fon-art-equalizer">
-                    <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-                  </div>
-                </div>
-                <span class="fon-art-caption">UN SIGNAL · TOUT UN QUARTIER</span>
+                <div class="fon-art-orbit fon-art-orbit-one"></div>
+                <div class="fon-art-orbit fon-art-orbit-two"></div>
+                <div class="fon-art-sun"></div>
+                <div class="fon-art-core"><span>Fɔ̀ngbè</span><small>UNE LANGUE, DES VOIX</small></div>
+                <span class="fon-art-word fon-art-word-one">àgbọ̀</span>
+                <span class="fon-art-word fon-art-word-two">ɖò</span>
+                <span class="fon-art-word fon-art-word-three">wémɛ̀</span>
+                <div class="fon-art-waveform"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                <span class="fon-art-caption">BÉNIN <b>·</b> LANGUE VIVANTE <b>·</b> AVENIR PARTAGÉ</span>
               </div>
             </section>
-            <div class="fon-mode-heading">
-              <div>
-                <span class="fon-eyebrow">À toi de choisir</span>
-                <h2>Choisis ton parcours</h2>
+            <section class="fon-project-intro" id="vision">
+              <div class="fon-section-heading">
+                <span class="fon-eyebrow">Pourquoi FFR ?</span>
+                <h2>Une langue vivante mérite des outils à sa mesure.</h2>
               </div>
-              <span class="fon-mode-count">3 façons d'explorer</span>
-            </div>
-            <div class="fon-mode-cards">
-              <a class="fon-mode-card fon-game-card" href="/game">
-                <span class="fon-card-topline"><span class="fon-mode-icon">♫</span><span class="fon-card-tag">Chapitre pilote</span></span>
-                <strong>Explorer Le carnet des voix</strong>
-                <span>Prépare des phrases pour une radio fictive et découvre des repères sourcés sur l'histoire du Bénin.</span>
-                <span class="fon-mode-action">Lancer l'aventure <b aria-hidden="true">→</b></span>
-              </a>
-              <button id="fon-open-chat" class="fon-mode-card" data-open-chat type="button">
-                <span class="fon-card-topline"><span class="fon-mode-icon" aria-hidden="true">◉</span><span class="fon-card-tag">Conversation</span></span>
-                <strong>Discuter avec l'IA</strong>
-                <span>Parle naturellement et reçois une réponse orale en fon.</span>
-                <span class="fon-mode-action">Commencer la discussion <b aria-hidden="true">→</b></span>
-              </button>
-              <button id="fon-open-training" class="fon-mode-card" type="button">
-                <span class="fon-card-topline"><span class="fon-mode-icon fon-mode-icon-training" aria-hidden="true">Aa</span><span class="fon-card-tag">Contribution libre</span></span>
-                <strong>Contribuer à l'entraînement</strong>
-                <span>Ajoute une phrase français/fon et enregistre sa prononciation.</span>
-                <span class="fon-mode-action">Ajouter une phrase <b aria-hidden="true">→</b></span>
-              </button>
-            </div>
-            <p class="fon-landing-note">Tes contributions restent sur le serveur qui héberge le prototype et ne sont enregistrées qu'avec ton accord.</p>
-          </div>
-          <nav class="fon-home-nav" aria-label="Navigation principale">
-            <a class="fon-home-nav-item" href="/game">
-              <span aria-hidden="true">◇</span>
-              <span>Histoire</span>
+              <div class="fon-project-copy">
+                <p>Le fon — fɔngbè — se parle, se transmet et évolue au quotidien. Pourtant, les outils numériques qui comprennent et font entendre les langues africaines restent rares. FFR veut contribuer à changer cela, en partant des données, des voix et des réalités du Bénin.</p>
+                <p>Notre ambition : des technologies utiles, évaluées avec les locuteurs, qui soutiennent la transmission sans prétendre remplacer les personnes ni figer une langue diverse.</p>
+              </div>
+              <div class="fon-facts" aria-label="Repères du projet">
+                <div><strong>53 975</strong><span>paires Fon–français dans le corpus historique principal</span></div>
+                <div><strong>3 179</strong><span>entrées dans le manifeste du corpus vocal présent</span></div>
+                <div><strong>Avec les locuteurs</strong><span>la qualité et les usages doivent être évalués par la communauté</span></div>
+              </div>
+            </section>
+            <section class="fon-approach" id="demarche">
+              <div class="fon-section-heading">
+                <span class="fon-eyebrow">De la recherche à l’expérience</span>
+                <h2>Comprendre. Traduire. Faire entendre.</h2>
+                <p>Un parcours expérimental qui relie la parole aux outils de langue.</p>
+              </div>
+              <div class="fon-approach-cards">
+                <article class="fon-approach-card">
+                  <span class="fon-approach-number">01 <span aria-hidden="true">⌁</span></span>
+                  <h3>Écouter la parole</h3>
+                  <p>Un prototype de reconnaissance vocale explore l’entrée en français et en fon. Sa précision en fon reste à mesurer avec des locuteurs.</p>
+                </article>
+                <article class="fon-approach-card">
+                  <span class="fon-approach-number">02 <span aria-hidden="true">↔</span></span>
+                  <h3>Relier les langues</h3>
+                  <p>Les corpus Fon–français et les modèles de traduction forment le socle de recherche. Les traductions automatiques peuvent se tromper.</p>
+                </article>
+                <article class="fon-approach-card">
+                  <span class="fon-approach-number">03 <span aria-hidden="true">♫</span></span>
+                  <h3>Donner une voix</h3>
+                  <p>La synthèse vocale permet d’écouter du texte en fon. La qualité, la prononciation et les usages doivent encore être évalués.</p>
+                </article>
+              </div>
+            </section>
+            <section class="fon-vision-band">
+              <span class="fon-eyebrow">Notre vision</span>
+              <blockquote>La technologie doit aider les langues à prendre leur place — et laisser leurs locuteurs en garder la voix.</blockquote>
+              <p>Des outils accessibles, des données documentées, une évaluation humaine et un développement responsable.</p>
+            </section>
+            <section class="fon-explore">
+              <div class="fon-section-heading">
+                <span class="fon-eyebrow">Explorer le prototype</span>
+                <h2>La vision prend forme, étape par étape.</h2>
+              </div>
+              <div class="fon-mode-cards">
+                <a id="fon-open-chat" class="fon-mode-card" href="/game?screen=assistant">
+                  <span class="fon-card-topline"><span class="fon-mode-icon" aria-hidden="true">◉</span><span class="fon-card-tag">Prototype vocal</span></span>
+                  <strong>Essayer l’assistant</strong>
+                  <span>Découvre le parcours de conversation, de la parole à une réponse audio en fon.</span>
+                  <span class="fon-mode-action">Ouvrir l’assistant <b aria-hidden="true">→</b></span>
+                </a>
+                <a class="fon-mode-card fon-game-card" href="/game">
+                  <span class="fon-card-topline"><span class="fon-mode-icon">♫</span><span class="fon-card-tag">Expérience narrative</span></span>
+                  <strong>Le carnet des voix</strong>
+                  <span>Explore un chapitre pilote autour d’une radio fictive et de la parole au quotidien.</span>
+                  <span class="fon-mode-action">Explorer le carnet <b aria-hidden="true">→</b></span>
+                </a>
+                <a id="fon-open-training" class="fon-mode-card" href="/game?screen=collecte">
+                  <span class="fon-card-topline"><span class="fon-mode-icon fon-mode-icon-training" aria-hidden="true">Aa</span><span class="fon-card-tag">Contribution</span></span>
+                  <strong>Découvrir la collecte</strong>
+                  <span>Propose une paire de phrases et, si tu le souhaites, un enregistrement vocal.</span>
+                  <span class="fon-mode-action">Voir le parcours <b aria-hidden="true">→</b></span>
+                </a>
+              </div>
+            </section>
+            <section class="fon-responsibility">
+              <span class="fon-responsibility-mark" aria-hidden="true">i</span>
+              <div><strong>Un prototype, développé avec responsabilité.</strong><p>Les contributions ne sont enregistrées qu’avec consentement explicite et restent à vérifier. Une voix générée par l’IA n’est pas une voix humaine de référence. Le projet ne remplace ni l’expertise des locuteurs, ni une validation communautaire.</p></div>
+            </section>
+          </main>
+          <footer class="fon-site-footer">
+            <a class="fon-site-brand" href="/" aria-label="FFR — accueil">
+              <span class="fon-site-mark" aria-hidden="true">F</span>
+              <span><strong>FFR</strong><small>Fon · français · voix</small></span>
             </a>
-            <button class="fon-home-nav-item" data-open-chat type="button">
-              <span aria-hidden="true">◉</span>
-              <span>Ma voix</span>
-            </button>
-            <button class="fon-home-nav-item is-active" data-go-home type="button" aria-current="page">
-              <span aria-hidden="true">⌂</span>
-              <span>Accueil</span>
-            </button>
-          </nav>
-        </div>
-        <div id="fon-chat-screen" hidden>
-        <div class="fon-page">
-          <header class="fon-header">
-            <div class="fon-brand">
-              <span class="fon-brand-mark" aria-hidden="true">F</span>
-              <div><strong>Assistant vocal</strong><span>Parlons en fon</span></div>
-            </div>
-            <button class="fon-back-button" data-go-home type="button">← Accueil</button>
-            <label class="fon-language">
-              <span>Langue</span>
-              <select id="source-language" aria-label="Langue parlée">
-                <option value="Français" selected>Français</option>
-                <option value="Fon">Fon</option>
-              </select>
-            </label>
-          </header>
-          <main class="fon-layout">
-            <section class="fon-hero" aria-label="Assistant vocal">
-              <div class="fon-guide-halo">
-                <div id="fon-guide" data-state="idle" role="img"
-                  aria-label="Guide souriant, un homme en tenue colorée qui vous accueille">
-                  <svg viewBox="0 0 240 330" aria-hidden="true">
-                    <ellipse cx="119" cy="317" rx="88" ry="9" fill="#101435" opacity=".18"/>
-                    <path d="M39 319c5-43 19-69 49-82l30-8 31 8c29 11 47 39 53 82Z" fill="#1c2670"/>
-                    <path d="M49 285l17-18 17 18-17 18Zm59-25 13-14 14 14-14 14Zm54 28 17-18 17 18-17 18Z" fill="#d3234b"/>
-                    <circle cx="92" cy="280" r="7" fill="#f5b800"/><circle cx="145" cy="302" r="7" fill="#0f8a4f"/>
-                    <circle cx="188" cy="274" r="6" fill="#f5b800"/><circle cx="105" cy="311" r="5" fill="#0f8a4f"/>
-                    <path d="M97 216h45v38q-21 17-45 0Z" fill="#75482e"/>
-                    <path d="M55 250q23-19 48-23l17 20 17-20q28 4 52 23l-22 26-9-13v56H57v-56l-10 13-16-16Z" fill="#f5b800"/>
-                    <path d="M61 253q19-16 40-20l19 20 19-20q23 4 42 20l-19 23-10-12v52H71v-52l-10 12-12-13Z" fill="#1c2670"/>
-                    <path d="m88 244 9 10-10 10-10-10Zm59 24 9 10-10 10-10-10Zm-45 27 7 8-8 8-8-8Z" fill="#d3234b"/>
-                    <circle cx="125" cy="241" r="4" fill="#f5b800"/><circle cx="174" cy="250" r="4" fill="#f5b800"/>
-                    <path d="M104 239q21 19 42 0" fill="none" stroke="#f5b800" stroke-width="4" stroke-linecap="round"/>
-                    <circle cx="125" cy="257" r="4" fill="#f5b800"/>
-                    <path d="M50 250q-15 18-17 38" fill="none" stroke="#75482e" stroke-width="16" stroke-linecap="round"/>
-                    <circle cx="32" cy="291" r="9" fill="#75482e"/>
-                    <g class="fon-guide-arm">
-                      <path d="M172 246q18-20 21-45l4-29" fill="none" stroke="#75482e" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
-                      <path d="M197 177q-8-2-8-10l1-17q0-5 4-5t4 5l1 10 2-17q1-5 5-4 4 0 3 6l-1 16 4-12q2-5 6-3 4 2 2 7l-4 15q-3 13-15 14Z" fill="#75482e"/>
-                      <path d="M193 168q7 5 14 2" fill="none" stroke="#603a28" stroke-width="2" stroke-linecap="round"/>
-                    </g>
-                    <path d="M67 143Q56 111 64 84Q70 52 102 53Q144 43 171 64Q190 83 181 143L169 125Q163 100 139 94Q110 85 85 107L77 131Z" fill="#241713"/>
-                    <ellipse cx="66" cy="157" rx="10" ry="15" fill="#75482e"/>
-                    <ellipse cx="181" cy="157" rx="10" ry="15" fill="#75482e"/>
-                    <ellipse cx="124" cy="151" rx="56" ry="67" fill="#8a5635"/>
-                    <circle cx="66" cy="174" r="8" fill="#f5b800"/><circle cx="182" cy="174" r="8" fill="#f5b800"/>
-                    <ellipse cx="101" cy="166" rx="13" ry="8" fill="#d96f68" opacity=".48"/>
-                    <ellipse cx="148" cy="166" rx="13" ry="8" fill="#d96f68" opacity=".48"/>
-                    <path d="M91 135q12-9 23 0m16 0q12-9 23 0" fill="none" stroke="#241713" stroke-width="5" stroke-linecap="round"/>
-                    <ellipse cx="104" cy="148" rx="8" ry="10" fill="#fff"/><ellipse cx="141" cy="148" rx="8" ry="10" fill="#fff"/>
-                    <circle cx="106" cy="149" r="4.5" fill="#241713"/><circle cx="139" cy="149" r="4.5" fill="#241713"/>
-                    <circle cx="107" cy="147" r="1.5" fill="#fff"/><circle cx="140" cy="147" r="1.5" fill="#fff"/>
-                    <path d="M123 151q-3 15 3 17" fill="none" stroke="#603a28" stroke-width="3" stroke-linecap="round"/>
-                    <path d="M101 175q11-8 22 0 6-7 12 0 11-8 22 0l-4 7q-9 4-17-2-7 6-17 2-9 4-17-2Z" fill="#30201c"/>
-                    <g class="fon-guide-mouth">
-                      <path d="M108 190q16 13 32 0-4 15-16 15t-16-15Z" fill="#54251f"/>
-                      <path d="M111 191q13 8 26 0" fill="none" stroke="#f3b4a1" stroke-width="3" stroke-linecap="round"/>
-                    </g>
-                    <path d="M75 85q9-22 29-24m8-3 5-1m11 1 5 1m11 4 4 3" fill="none" stroke="#3b241d" stroke-width="5" stroke-linecap="round"/>
-                    <circle cx="84" cy="71" r="3" fill="#3b241d"/><circle cx="98" cy="61" r="3" fill="#3b241d"/>
-                  </svg>
-                </div>
-              </div>
-              <button id="fon-mic-start" type="button" data-state="idle">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor"/>
-                  <path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-                <span id="fon-mic-label">Parler</span>
-              </button>
-              <div id="fon-progress-track" data-mode="hidden" role="progressbar"
-                aria-label="Progression de l'enregistrement et de la réponse"
-                aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <div id="fon-progress-fill"></div>
-              </div>
-              <p id="fon-mic-status" role="status" aria-live="polite">
-                Appuie sur Parler pour commencer.
-              </p>
-              <button id="fon-replay" type="button" hidden>Écouter la réponse</button>
-            </section>
-            <section class="fon-transcript-panel" aria-live="polite">
-              <div class="fon-transcript-heading">
-                <span class="fon-transcript-icon" aria-hidden="true">Aa</span>
-                <div><h1>Ta parole</h1><p>Corrige la transcription si nécessaire</p></div>
-              </div>
-              <label class="fon-field">
-                <span>Transcription reconnue</span>
-                <textarea id="fon-transcript" rows="3"
-                  placeholder="Ta phrase apparaîtra ici après la reconnaissance."></textarea>
-              </label>
-              <label class="fon-field">
-                <span>Réponse de l'assistant en fon</span>
-                <textarea id="fon-answer" rows="4"
-                  placeholder="La réponse en fon apparaîtra ici. Tu peux la corriger."></textarea>
-              </label>
-              <audio id="fon-response-audio" controls preload="metadata"></audio>
-              <div id="fon-contribution" hidden>
-                <label class="fon-consent">
-                  <input id="fon-collection-consent" type="checkbox">
-                  <span>J'accepte de sauvegarder cet échange pour contribuer à l'amélioration des modèles.</span>
-                </label>
-                <p class="fon-data-note">
-                  Audio et textes conservés uniquement sur cet ordinateur, jamais envoyés à OpenRouter.
-                  L'audio de réponse sera régénéré après correction ; il est synthétique et ne sert pas de voix humaine cible pour le TTS.
-                </p>
-                <button id="fon-save-contribution" type="button" disabled>
-                  Enregistrer ma contribution
-                </button>
-                <p id="fon-contribution-status" role="status" aria-live="polite"></p>
-              </div>
-              <div class="fon-transcript-footer"><span></span>Tu gardes le contrôle de tes corrections</div>
-            </section>
-          </main>
-        </div>
-        </div>
-        <div id="fon-training-screen" class="fon-page fon-training-screen" hidden>
-          <header class="fon-header">
-            <div class="fon-brand">
-              <span class="fon-brand-mark" aria-hidden="true">F</span>
-              <div><strong>Contribuer au fon</strong><span>Une phrase à la fois</span></div>
-            </div>
-            <button class="fon-back-button" data-go-home type="button">← Accueil</button>
-          </header>
-          <main class="fon-training-layout">
-            <section class="fon-training-card">
-              <span class="fon-eyebrow">Collecte de phrases</span>
-              <h1>Partage une traduction et sa prononciation</h1>
-              <p class="fon-training-intro">Écris une phrase en français, sa traduction en fon, écoute la voix de l'IA puis enregistre une voix humaine si tu le souhaites.</p>
-              <label class="fon-field">
-                <span>Phrase en français</span>
-                <textarea id="training-french" rows="2" maxlength="500"
-                  placeholder="Exemple : Bonjour, comment vas-tu ?"></textarea>
-              </label>
-              <label class="fon-field">
-                <span>Traduction en fon</span>
-                <textarea id="training-fon" rows="3" maxlength="500"
-                  placeholder="Écris ici la traduction en fon."></textarea>
-              </label>
-              <div class="fon-training-actions">
-                <button id="training-play" class="fon-secondary-button" type="button">▶ Écouter la voix de l'IA</button>
-                <button id="training-record" class="fon-secondary-button" type="button">● Enregistrer ma voix</button>
-              </div>
-              <audio id="training-audio" controls preload="none" hidden></audio>
-              <p id="training-record-status" class="fon-training-status" role="status" aria-live="polite">
-                L'enregistrement de ta voix est facultatif. Clique à nouveau pour terminer.
-              </p>
-              <label class="fon-consent fon-training-consent">
-                <input id="training-consent" type="checkbox">
-                <span>J'accepte de sauvegarder ces textes et l'enregistrement de ma voix (s'il existe) pour contribuer à l'amélioration des modèles.</span>
-              </label>
-              <p class="fon-data-note">Les données restent sur cet ordinateur. La voix de l'IA est conservée pour comparaison, mais seule ta lecture humaine peut servir de référence vocale pour entraîner le TTS. Tu peux enregistrer la paire de textes sans ajouter d'audio humain.</p>
-              <button id="training-save" class="fon-save-button" type="button" disabled>Enregistrer cette contribution</button>
-              <p id="training-save-status" class="fon-training-status" role="status" aria-live="polite"></p>
-            </section>
-          </main>
+            <p>Une recherche en devenir, ancrée au Bénin.</p>
+            <a href="/game">Explorer Le carnet des voix <span aria-hidden="true">↗</span></a>
+          </footer>
         </div>
         <style>
           :root { color-scheme: dark; }
           body {
-            background: radial-gradient(ellipse at 18% 72%, rgba(52, 73, 190, .5), transparent 38%),
-              radial-gradient(ellipse at 86% 20%, rgba(106, 34, 96, .22), transparent 34%),
-              #101435 !important;
+            background: radial-gradient(ellipse at 18% 72%, rgba(0, 194, 255, .16), transparent 38%),
+              radial-gradient(ellipse at 86% 20%, rgba(11, 60, 93, .4), transparent 34%),
+              #0a2540 !important;
           }
           .gradio-container {
             width:100% !important; max-width:none !important; min-height:100vh;
             padding:0 34px 32px !important;
-            background:radial-gradient(ellipse at 18% 72%,rgba(52,73,190,.5),transparent 38%),
-              radial-gradient(ellipse at 86% 20%,rgba(106,34,96,.22),transparent 34%),#101435 !important;
+            background:radial-gradient(ellipse at 18% 72%,rgba(0,194,255,.16),transparent 38%),
+              radial-gradient(ellipse at 86% 20%,rgba(11,60,93,.4),transparent 34%),#0a2540 !important;
           }
           footer { display: none !important; }
           #fon-voice-interface { width: 100%; }
           [hidden] { display:none !important; }
           #fon-voice-interface #fon-landing {
             min-height:calc(100vh - 32px); display:flex; flex-direction:column;
-            color:#f8f6ff !important; font-family:Inter,ui-sans-serif,system-ui,sans-serif;
-            background:radial-gradient(ellipse at 12% 75%,rgba(52,73,190,.32),transparent 38%),
-              radial-gradient(ellipse at 88% 8%,rgba(106,34,96,.18),transparent 34%),#101435 !important;
+            color:#e6f7ff !important; font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+            background:radial-gradient(ellipse at 12% 75%,rgba(0,194,255,.14),transparent 38%),
+              radial-gradient(ellipse at 88% 8%,rgba(11,60,93,.35),transparent 34%),#0a2540 !important;
             padding-bottom:106px; box-sizing:border-box;
           }
           #fon-voice-interface .fon-landing-brand { display:flex; align-items:center; gap:12px; min-height:82px; border-bottom:1px solid rgba(255,255,255,.1); }
@@ -1116,15 +380,15 @@ with gr.Blocks(title="Le carnet des voix — aventure en fon") as demo:
           #fon-voice-interface .fon-landing-hero {
             display:grid; grid-template-columns:minmax(0,1.05fr) minmax(280px,.95fr);
             align-items:center; gap:36px; padding:clamp(28px,5vw,58px);
-            overflow:hidden; border:1px solid rgba(255,255,255,.12); border-radius:30px;
-            background:radial-gradient(ellipse at 82% 18%,rgba(246,191,50,.12),transparent 40%),
-              linear-gradient(135deg,rgba(39,47,94,.96),rgba(22,27,62,.94));
+            overflow:hidden; border:1px solid rgba(230,247,255,.12); border-radius:30px;
+            background:radial-gradient(ellipse at 82% 18%,rgba(0,194,255,.12),transparent 40%),
+              linear-gradient(135deg,rgba(11,60,93,.85),rgba(10,37,64,.9));
             box-shadow:0 24px 70px rgba(0,0,0,.2);
           }
           #fon-voice-interface .fon-landing-copy { text-align:left; }
-          #fon-voice-interface .fon-eyebrow { color:#ffd348 !important; font-size:11px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
-          #fon-voice-interface .fon-landing-copy h1 { max-width:9ch; margin:15px 0 14px; color:#fff !important; font-size:clamp(38px,5.4vw,64px); line-height:.99; letter-spacing:-.045em; }
-          #fon-voice-interface .fon-landing-copy p { max-width:430px; margin:0; color:#c3cae5 !important; font-size:16px; line-height:1.7; }
+          #fon-voice-interface .fon-eyebrow { color:#00c2ff !important; font-size:11px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; font-family:"Space Grotesk",ui-sans-serif,sans-serif; }
+          #fon-voice-interface .fon-landing-copy h1 { max-width:9ch; margin:15px 0 14px; color:#e6f7ff !important; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:clamp(38px,5.4vw,64px); line-height:.99; letter-spacing:-.045em; }
+          #fon-voice-interface .fon-landing-copy p { max-width:430px; margin:0; color:rgba(230,247,255,.85) !important; font-size:16px; line-height:1.7; }
           #fon-voice-interface .fon-landing-art {
             position:relative; min-height:290px; overflow:hidden; isolation:isolate;
             border:1px solid rgba(255,255,255,.13); border-radius:24px;
@@ -1157,22 +421,22 @@ with gr.Blocks(title="Le carnet des voix — aventure en fon") as demo:
           #fon-voice-interface .fon-mode-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; text-align:left; }
           #fon-voice-interface .fon-mode-card {
             display:flex !important; flex-direction:column; align-items:flex-start; min-width:0; min-height:220px; padding:21px;
-            border:1px solid rgba(255,255,255,.13) !important; border-radius:20px;
-            background:linear-gradient(150deg,rgba(42,48,88,.95),rgba(28,32,68,.95)) !important;
-            color:#f8f6ff !important; text-align:left; font:inherit; cursor:pointer;
+            border:1px solid rgba(230,247,255,.13) !important; border-radius:20px;
+            background:linear-gradient(150deg,rgba(11,60,93,.85),rgba(10,37,64,.9)) !important;
+            color:#e6f7ff !important; text-align:left; font:inherit; cursor:pointer;
             transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;
             text-decoration:none !important; box-shadow:0 12px 28px rgba(0,0,0,.12);
           }
-          #fon-voice-interface .fon-mode-card:hover { transform:translateY(-4px); border-color:rgba(246,191,50,.65) !important; background:linear-gradient(150deg,#303964,#22294f) !important; box-shadow:0 18px 34px rgba(0,0,0,.22); }
-          #fon-voice-interface .fon-mode-card:focus-visible { outline:3px solid #ffd348; outline-offset:3px; }
-          #fon-voice-interface .fon-game-card { border-color:rgba(246,191,50,.42) !important; background:linear-gradient(150deg,rgba(84,62,81,.98),rgba(36,43,78,.98)) !important; }
+          #fon-voice-interface .fon-mode-card:hover { transform:translateY(-4px); border-color:rgba(0,194,255,.65) !important; background:linear-gradient(150deg,#0b3c5d,#0a2540) !important; box-shadow:0 18px 34px rgba(0,0,0,.22),0 0 30px rgba(0,194,255,.12); }
+          #fon-voice-interface .fon-mode-card:focus-visible { outline:3px solid #00c2ff; outline-offset:3px; }
+          #fon-voice-interface .fon-game-card { border-color:rgba(0,194,255,.42) !important; background:linear-gradient(150deg,rgba(11,60,93,.95),rgba(10,37,64,.95)) !important; }
           #fon-voice-interface .fon-card-topline { display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:21px; }
-          #fon-voice-interface .fon-mode-icon { display:grid; place-items:center; width:43px; height:43px; border-radius:14px; background:rgba(246,191,50,.16); color:#ffd348 !important; font-size:23px; font-weight:800; }
+          #fon-voice-interface .fon-mode-icon { display:grid; place-items:center; width:43px; height:43px; border-radius:14px; background:rgba(0,194,255,.16); color:#00c2ff !important; font-size:23px; font-weight:800; }
           #fon-voice-interface .fon-mode-icon-training { font-size:17px; }
-          #fon-voice-interface .fon-card-tag { color:#d5d9ec !important; font-size:10px; font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
-          #fon-voice-interface .fon-mode-card strong { color:#fff !important; font-size:17px; line-height:1.3; }
-          #fon-voice-interface .fon-mode-card > span:not(.fon-card-topline) { margin-top:8px; color:#bdc4e0 !important; font-size:13px; line-height:1.55; }
-          #fon-voice-interface .fon-mode-card .fon-mode-action { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; margin-top:auto !important; padding-top:22px; color:#ffd348 !important; font-size:13px; font-weight:750; }
+          #fon-voice-interface .fon-card-tag { color:rgba(230,247,255,.8) !important; font-size:10px; font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+          #fon-voice-interface .fon-mode-card strong { color:#fff !important; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:17px; line-height:1.3; }
+          #fon-voice-interface .fon-mode-card > span:not(.fon-card-topline) { margin-top:8px; color:rgba(230,247,255,.72) !important; font-size:13px; line-height:1.55; }
+          #fon-voice-interface .fon-mode-card .fon-mode-action { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; margin-top:auto !important; padding-top:22px; color:#00c2ff !important; font-size:13px; font-weight:750; }
           #fon-voice-interface .fon-mode-action b { font-size:19px; transition:transform .18s ease; }
           #fon-voice-interface .fon-mode-card:hover .fon-mode-action b { transform:translateX(3px); }
           #fon-voice-interface .fon-landing-note { width:min(1000px,100%); margin:0 auto 18px; color:#aeb5d7 !important; font-size:12px; line-height:1.6; }
@@ -1201,140 +465,6 @@ with gr.Blocks(title="Le carnet des voix — aventure en fon") as demo:
             color:#ffd348 !important; -webkit-text-fill-color:#ffd348;
           }
           #fon-voice-interface .fon-home-nav-item:focus-visible { outline:2px solid #ffd348; outline-offset:2px; }
-          .fon-back-button,.fon-secondary-button,.fon-save-button {
-            border:1px solid rgba(255,255,255,.17); border-radius:999px; padding:11px 16px;
-            background:rgba(255,255,255,.06); color:#fff; font:inherit; cursor:pointer;
-          }
-          .fon-back-button:hover,.fon-secondary-button:hover:not(:disabled) { background:rgba(255,255,255,.13); }
-          .fon-training-layout { display:grid; place-items:center; min-height:calc(100vh - 110px); padding:30px 0; }
-          .fon-training-card { width:min(720px,100%); padding:clamp(22px,4vw,42px); border:1px solid rgba(255,255,255,.1); border-radius:24px; background:rgba(255,255,255,.055); box-shadow:0 24px 70px rgba(0,0,0,.2); }
-          .fon-training-card h1 { font-size:clamp(26px,3vw,34px); }
-          .fon-training-intro { margin-bottom:26px; }
-          .fon-training-card .fon-field { margin-top:18px; }
-          .fon-training-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
-          .fon-secondary-button { border-color:rgba(246,191,50,.38); color:#ffda6f; }
-          .fon-secondary-button:disabled,.fon-save-button:disabled { opacity:.5; cursor:not-allowed; }
-          #training-audio { width:100%; margin-top:16px; }
-          .fon-training-status { min-height:22px; color:#b9c0df; font-size:13px; }
-          .fon-training-status[data-state="error"] { color:#ff9099; }
-          .fon-training-status[data-state="success"] { color:#70e1a8; }
-          .fon-training-consent { margin-top:20px; }
-          .fon-save-button { width:100%; margin-top:12px; border:0; background:linear-gradient(135deg,#ffd348,#f3aa25); color:#182044; font-weight:800; }
-          .fon-save-button:hover:not(:disabled) { filter:brightness(1.06); }
-          .fon-page { min-height: 100vh; color: #fff; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-          .fon-header {
-            display: flex; justify-content: space-between; align-items: center;
-            min-height: 92px; border-bottom: 1px solid rgba(255,255,255,.09);
-          }
-          .fon-brand { display: flex; align-items: center; gap: 12px; }
-          .fon-brand-mark {
-            display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px;
-            background: linear-gradient(145deg,#f6bd26,#eb8f32); color: #15193e;
-            font-size: 22px; font-weight: 900;
-          }
-          .fon-brand strong,.fon-brand span { display:block; }
-          .fon-brand strong { font-size: 17px; letter-spacing: .01em; }
-          .fon-brand div span { margin-top: 3px; color: #aeb5d7; font-size: 13px; }
-          .fon-language { display:flex; align-items:center; gap:10px; color:#bfc5e1; font-size:13px; }
-          .fon-language select {
-            min-width: 128px; padding: 10px 34px 10px 14px; border: 1px solid rgba(255,255,255,.2);
-            border-radius: 999px; background:#1b2048; color:#fff; font:inherit; cursor:pointer;
-          }
-          .fon-layout {
-            display:grid; grid-template-columns:minmax(0, .92fr) minmax(0, 1.08fr);
-            gap: clamp(24px, 6vw, 88px); align-items:center; max-width:1120px;
-            min-height: min(690px, calc(100vh - 94px)); margin:0 auto; padding:30px 0;
-          }
-          .fon-hero { display:flex; flex-direction:column; align-items:center; text-align:center; }
-          .fon-guide-halo {
-            display:grid; place-items:center; width:100%; min-height:460px;
-            background:radial-gradient(ellipse,rgba(244,178,42,.13),rgba(70,86,190,.05) 48%,transparent 72%);
-          }
-          #fon-guide { width:auto; height:min(58vh,500px); max-width:100%; }
-          #fon-guide svg { display:block; width:auto; height:100%; overflow:visible; filter:drop-shadow(0 18px 26px rgba(0,0,0,.24)); }
-          .fon-guide-arm { transform-box:view-box; transform-origin:166px 246px; }
-          #fon-guide[data-state="idle"] .fon-guide-arm,
-          #fon-guide[data-state="listening"] .fon-guide-arm { animation:fon-guide-wave 2.4s ease-in-out infinite; }
-          #fon-guide[data-state="speaking"] .fon-guide-mouth {
-            transform-box:fill-box; transform-origin:center; animation:fon-guide-talk .24s ease-in-out infinite alternate;
-          }
-          @keyframes fon-guide-wave { 0%,100% { transform:rotate(0); } 50% { transform:rotate(7deg); } }
-          @keyframes fon-guide-talk { from { transform:scaleY(.65); } to { transform:scaleY(1.2); } }
-          #fon-mic-start {
-            display:flex; align-items:center; justify-content:center; gap:12px; min-width:230px;
-            min-height:62px; margin-top:-4px; padding:14px 28px; border:0; border-radius:999px;
-            background:linear-gradient(135deg,#ffd348,#f3aa25); color:#182044;
-            box-shadow:0 12px 32px rgba(245,177,38,.26); font-size:18px; font-weight:750;
-            cursor:pointer; transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
-          }
-          #fon-mic-start:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 16px 38px rgba(245,177,38,.34); }
-          #fon-mic-start svg { width:23px; height:23px; }
-          #fon-mic-start[data-state="listening"] { background:linear-gradient(135deg,#ef6675,#d84161); color:#fff; box-shadow:0 12px 32px rgba(216,65,97,.27); }
-          #fon-mic-start[data-state="processing"],#fon-mic-start:disabled { opacity:.76; cursor:wait; }
-          #fon-mic-status { min-height:24px; margin:14px 0 0; color:#b9c0df; font-size:14px; }
-          #fon-mic-status[data-state="error"] { color:#ff9099; font-weight:650; }
-          #fon-progress-track {
-            width:min(280px,90%); height:7px; margin-top:14px; overflow:hidden; border-radius:999px;
-            background:rgba(255,255,255,.16);
-          }
-          #fon-progress-track[data-mode="hidden"] { display:none; }
-          #fon-progress-fill { height:100%; width:0; border-radius:inherit; background:#f6bf32; transition:width 100ms linear; }
-          #fon-progress-track[data-mode="indeterminate"] #fon-progress-fill { width:35% !important; animation:fon-progress-slide 1.1s ease-in-out infinite alternate; }
-          #fon-progress-track[data-mode="complete"] #fon-progress-fill { background:#35bb83; }
-          #fon-progress-track[data-mode="error"] #fon-progress-fill { width:100%; background:#ef6675; }
-          #fon-replay {
-            margin-top:10px; padding:10px 18px; border:1px solid rgba(255,255,255,.24);
-            border-radius:999px; background:rgba(255,255,255,.08); color:#fff;
-            font-size:14px; font-weight:650; cursor:pointer;
-          }
-          .fon-transcript-panel {
-            display:flex; flex-direction:column; min-height:440px; padding:clamp(26px,4vw,48px);
-            border-radius:26px; background:#fff; color:#202344;
-            box-shadow:0 24px 70px rgba(0,0,0,.24);
-          }
-          .fon-transcript-heading { display:flex; align-items:center; gap:16px; padding-bottom:24px; border-bottom:1px solid #ececf3; }
-          .fon-transcript-icon {
-            display:grid; place-items:center; width:48px; height:48px; border-radius:15px;
-            background:#fff3ce; color:#ad7410 !important; font-size:18px; font-weight:800;
-          }
-          .fon-transcript-heading h1 { margin:0; color:#202344 !important; font-size:clamp(22px,3vw,30px); line-height:1.15; font-weight:780; }
-          .fon-transcript-heading p { margin:6px 0 0; color:#81849a !important; font-size:14px; }
-          .fon-field { display:flex; flex-direction:column; gap:9px; margin-top:22px; color:#4b4d68 !important; font-size:14px; font-weight:700; }
-          .fon-field span { color:#4b4d68 !important; }
-          .fon-field textarea {
-            width:100%; box-sizing:border-box; resize:vertical; min-height:92px; padding:14px 15px;
-            border:1px solid #dedfeb; border-radius:13px; background:#fbfbfd; color:#30324c;
-            font-family:inherit; font-size:16px; font-weight:500; line-height:1.6; outline:none;
-          }
-          .fon-field textarea:focus { border-color:#6874d8; box-shadow:0 0 0 3px rgba(104,116,216,.14); }
-          .fon-field textarea::placeholder { color:#a0a2b3; font-weight:400; }
-          #fon-answer { min-height:118px; }
-          #fon-response-audio { width:100%; margin-top:18px; }
-          #fon-contribution { margin-top:20px; padding:16px; border-radius:15px; background:#f4f5fb; }
-          #fon-contribution[hidden] { display:none; }
-          .fon-consent { display:flex; align-items:flex-start; gap:10px; color:#3e405c !important; font-size:14px; line-height:1.5; cursor:pointer; }
-          .fon-consent span { color:#3e405c !important; }
-          .fon-consent input { flex:0 0 auto; width:18px; height:18px; margin:1px 0 0; accent-color:#4856c8; }
-          .fon-data-note { margin:10px 0 14px; color:#777a92 !important; font-size:12px; line-height:1.5; }
-          #fon-save-contribution {
-            width:100%; padding:12px 16px; border:0; border-radius:11px;
-            background:#4856c8; color:#fff; font-size:14px; font-weight:700; cursor:pointer;
-          }
-          #fon-save-contribution:disabled { opacity:.48; cursor:not-allowed; }
-          #fon-contribution-status { margin:10px 0 0; color:#62657d !important; font-size:13px; line-height:1.5; }
-          #fon-contribution-status[data-state="error"] { color:#c5354d; }
-          #fon-contribution-status[data-state="success"] { color:#16875b; }
-          #fon-transcript {
-            min-height:92px; color:#383b57; font-size:16px; line-height:1.6;
-          }
-          .fon-transcript-footer {
-            display:flex; align-items:center; gap:9px; color:#9194a8 !important; font-size:12px;
-          }
-          .fon-transcript-footer span { width:8px; height:8px; border-radius:50%; background:#35bb83; }
-          @keyframes fon-progress-slide { from { margin-left:0; } to { margin-left:65%; } }
-          @media (prefers-reduced-motion:reduce) {
-            #fon-guide *,#fon-progress-fill,#fon-mic-start { animation:none !important; transition:none !important; }
-          }
           @media (max-width:800px) {
             .gradio-container { padding:0 20px 24px !important; }
             #fon-voice-interface { width:calc(100% + 64px) !important; max-width:none !important; margin-left:-32px !important; }
@@ -1444,12 +574,213 @@ with gr.Blocks(title="Le carnet des voix — aventure en fon") as demo:
               border-radius:0 0 35px 35px;
             }
           }
+          #fon-voice-interface #fon-landing {
+            min-height:100vh; padding:0 clamp(20px,5vw,76px) 0;
+            overflow:visible; border:0; border-radius:0;
+            background:
+              radial-gradient(ellipse at 82% 4%,rgba(0,194,255,.14),transparent 30%),
+              radial-gradient(ellipse at 8% 52%,rgba(11,60,93,.4),transparent 34%),
+              #0a2540 !important;
+          }
+          #fon-voice-interface .fon-site-header {
+            display:flex; width:min(1220px,100%); min-height:86px; flex:none;
+            align-items:center; justify-content:space-between; gap:28px;
+            margin:0 auto; border-bottom:1px solid rgba(230,247,255,.1);
+          }
+          #fon-voice-interface .fon-site-brand {
+            display:inline-flex; flex:none; align-items:center; gap:11px;
+            color:#fff !important; text-decoration:none !important;
+          }
+          #fon-voice-interface .fon-site-mark {
+            display:grid; width:42px; height:42px; place-items:center;
+            border:1px solid rgba(0,194,255,.5); border-radius:14px;
+            background:linear-gradient(145deg,#00c2ff,#0ea5e9); color:#0a2540;
+            font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:23px; font-weight:900;
+          }
+          #fon-voice-interface .fon-site-brand strong,
+          #fon-voice-interface .fon-site-brand small { display:block; }
+          #fon-voice-interface .fon-site-brand strong { color:#fff !important; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:17px; letter-spacing:.04em; }
+          #fon-voice-interface .fon-site-brand small { margin-top:3px; color:rgba(230,247,255,.65) !important; font-size:11px; }
+          #fon-voice-interface .fon-site-nav {
+            display:flex; align-items:center; justify-content:flex-end; gap:clamp(14px,2.4vw,32px);
+          }
+          #fon-voice-interface .fon-site-nav > a,
+          #fon-voice-interface .fon-site-footer > a:last-child {
+            color:rgba(230,247,255,.8) !important; font-size:13px; font-weight:650;
+            text-decoration:none !important; transition:color .18s ease;
+          }
+          #fon-voice-interface .fon-site-nav > a:hover,
+          #fon-voice-interface .fon-site-footer > a:last-child:hover { color:#00c2ff !important; }
+          #fon-voice-interface .fon-site-nav-cta,
+          #fon-voice-interface .fon-primary-action {
+            display:inline-flex; align-items:center; justify-content:center; gap:12px;
+            min-height:46px; padding:0 18px; border:0; border-radius:999px;
+            background:#00c2ff; color:#0a2540; font:inherit; font-size:13px;
+            font-weight:800; text-transform:uppercase; letter-spacing:.04em; cursor:pointer;
+            transition:transform .18s ease,filter .18s ease; box-shadow:0 0 30px rgba(0,194,255,.25);
+          }
+          #fon-voice-interface .fon-site-nav-cta:hover,
+          #fon-voice-interface .fon-primary-action:hover { transform:translateY(-2px); filter:brightness(1.05); }
+          #fon-voice-interface .fon-landing-content {
+            display:block; width:min(1120px,100%); min-height:0; flex:none;
+            overflow:visible; margin:0 auto; padding:52px 0 56px;
+          }
+          #fon-voice-interface .fon-landing-hero {
+            grid-template-columns:minmax(0,1.08fr) minmax(330px,.92fr);
+            gap:clamp(32px,6vw,82px); padding:clamp(36px,6vw,76px) 0;
+            overflow:visible; border:0; border-radius:0; background:none; box-shadow:none;
+          }
+          #fon-voice-interface .fon-landing-copy { text-align:left; }
+          #fon-voice-interface .fon-eyebrow {
+            display:inline-flex; align-items:center; gap:9px; color:#00c2ff !important;
+            font-size:11px; font-weight:800; letter-spacing:.15em; text-transform:uppercase;
+          }
+          #fon-voice-interface .fon-eyebrow-dot { width:7px; height:7px; border-radius:50%; background:#00c2ff; box-shadow:0 0 15px rgba(0,194,255,.7); }
+          #fon-voice-interface .fon-landing-copy h1 {
+            max-width:10ch; margin:23px 0 19px; color:#fff !important;
+            font-family:"Space Grotesk",ui-sans-serif,sans-serif;
+            font-size:clamp(48px,6.6vw,82px); font-weight:800; line-height:.99;
+            letter-spacing:-.06em;
+          }
+          #fon-voice-interface .fon-landing-copy h1 em { color:#00c2ff; font-style:normal; }
+          #fon-voice-interface .fon-landing-copy > p:not(.fon-hero-note) {
+            max-width:555px; margin:0; color:rgba(230,247,255,.85) !important;
+            font-size:clamp(16px,1.7vw,19px); line-height:1.75;
+          }
+          #fon-voice-interface .fon-hero-actions { display:flex; flex-wrap:wrap; align-items:center; gap:13px; margin-top:29px; }
+          #fon-voice-interface .fon-primary-action { min-height:54px; padding:0 23px; font-size:14px; }
+          #fon-voice-interface .fon-secondary-action {
+            display:inline-flex; align-items:center; gap:10px; min-height:50px; padding:0 15px;
+            color:#e6f7ff !important; font-size:14px; font-weight:700; text-decoration:none !important;
+          }
+          #fon-voice-interface .fon-secondary-action:hover { color:#00c2ff !important; }
+          #fon-voice-interface .fon-hero-note { display:flex; align-items:center; gap:9px; margin:22px 0 0; color:rgba(230,247,255,.55) !important; font-size:12px; line-height:1.5; }
+          #fon-voice-interface .fon-hero-note span { color:#00c2ff; }
+          #fon-voice-interface .fon-landing-art {
+            display:grid; min-height:405px; place-items:center; overflow:hidden; isolation:isolate;
+            border:1px solid rgba(230,247,255,.1); border-radius:50% 50% 38% 38% / 44% 44% 28% 28%;
+            background:
+              radial-gradient(ellipse at 50% 48%,rgba(0,194,255,.14),transparent 44%),
+              linear-gradient(155deg,rgba(11,60,93,.75),rgba(10,37,64,.96));
+            box-shadow:inset 0 0 80px rgba(255,255,255,.025),0 30px 90px rgba(0,0,0,.2);
+          }
+          #fon-voice-interface .fon-art-orbit { position:absolute; width:67%; aspect-ratio:1; border:1px solid rgba(0,194,255,.18); border-radius:50%; transform:rotate(-26deg) scaleY(.55); }
+          #fon-voice-interface .fon-art-orbit-one { width:85%; }
+          #fon-voice-interface .fon-art-orbit-two { width:110%; border-color:rgba(230,247,255,.09); transform:rotate(28deg) scaleY(.45); }
+          #fon-voice-interface .fon-art-sun { position:absolute; top:19%; right:19%; width:12px; height:12px; background:#00c2ff; box-shadow:0 0 22px #00c2ff; }
+          #fon-voice-interface .fon-art-core { z-index:1; display:flex; width:174px; height:174px; flex-direction:column; align-items:center; justify-content:center; gap:10px; border:1px solid rgba(0,194,255,.45); border-radius:50%; background:radial-gradient(circle at 35% 25%,#0f4a74,#0a2540 76%); box-shadow:0 0 0 14px rgba(0,194,255,.035),0 0 70px rgba(0,194,255,.28); }
+          #fon-voice-interface .fon-art-core > span { color:#fff; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:30px; font-weight:700; }
+          #fon-voice-interface .fon-art-core small { color:#00c2ff; font-size:8px; font-weight:800; letter-spacing:.16em; }
+          #fon-voice-interface .fon-art-word { position:absolute; z-index:2; padding:9px 13px; border:1px solid rgba(230,247,255,.16); border-radius:999px; background:rgba(11,37,64,.88); color:#e6f7ff; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:15px; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+          #fon-voice-interface .fon-art-word-one { top:22%; left:13%; }
+          #fon-voice-interface .fon-art-word-two { top:41%; right:8%; }
+          #fon-voice-interface .fon-art-word-three { bottom:25%; left:15%; }
+          #fon-voice-interface .fon-art-waveform { position:absolute; right:15%; bottom:22%; left:15%; display:flex; height:31px; align-items:center; justify-content:center; gap:5px; }
+          #fon-voice-interface .fon-art-waveform i { width:3px; height:25%; border-radius:4px; background:#00c2ff; opacity:.8; }
+          #fon-voice-interface .fon-art-waveform i:nth-child(3n) { height:70%; }
+          #fon-voice-interface .fon-art-waveform i:nth-child(4n) { height:100%; }
+          #fon-voice-interface .fon-art-waveform i:nth-child(5n) { height:48%; }
+          #fon-voice-interface .fon-art-caption { position:absolute; bottom:9%; color:rgba(230,247,255,.6); font-size:8px; font-weight:800; letter-spacing:.17em; }
+          #fon-voice-interface .fon-project-intro { display:grid; grid-template-columns:.85fr 1.15fr; gap:20px 70px; padding:62px 0 68px; border-top:1px solid rgba(230,247,255,.1); }
+          #fon-voice-interface .fon-section-heading h2 { max-width:18ch; margin:12px 0 0; color:#fff !important; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:clamp(28px,4vw,43px); line-height:1.12; letter-spacing:-.04em; }
+          #fon-voice-interface .fon-section-heading > p { margin:12px 0 0; color:rgba(230,247,255,.65) !important; font-size:15px; line-height:1.65; }
+          #fon-voice-interface .fon-project-copy { align-self:center; }
+          #fon-voice-interface .fon-project-copy p { margin:0 0 13px; color:rgba(230,247,255,.85) !important; font-size:15px; line-height:1.8; }
+          #fon-voice-interface .fon-facts { grid-column:1 / -1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:20px; border:1px solid rgba(230,247,255,.11); border-radius:18px; background:rgba(230,247,255,.035); }
+          #fon-voice-interface .fon-facts > div { display:flex; min-height:112px; flex-direction:column; justify-content:center; gap:7px; padding:20px 24px; }
+          #fon-voice-interface .fon-facts > div + div { border-left:1px solid rgba(230,247,255,.1); }
+          #fon-voice-interface .fon-facts strong { color:#00c2ff !important; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:clamp(20px,2.5vw,27px); letter-spacing:-.03em; }
+          #fon-voice-interface .fon-facts span { max-width:30ch; color:rgba(230,247,255,.65) !important; font-size:12px; line-height:1.5; }
+          #fon-voice-interface .fon-approach { padding:66px 0 72px; border-top:1px solid rgba(230,247,255,.1); }
+          #fon-voice-interface .fon-approach > .fon-section-heading { max-width:680px; }
+          #fon-voice-interface .fon-approach-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:15px; margin-top:30px; }
+          #fon-voice-interface .fon-approach-card { min-height:206px; padding:25px; border:1px solid rgba(230,247,255,.11); border-radius:18px; background:linear-gradient(145deg,rgba(11,60,93,.7),rgba(10,37,64,.6)); }
+          #fon-voice-interface .fon-approach-number { display:flex; justify-content:space-between; color:#00c2ff !important; font-size:12px; font-weight:800; letter-spacing:.1em; }
+          #fon-voice-interface .fon-approach-number span { font-size:20px; }
+          #fon-voice-interface .fon-approach-card h3 { margin:23px 0 9px; color:#fff !important; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:19px; }
+          #fon-voice-interface .fon-approach-card p { margin:0; color:rgba(230,247,255,.72) !important; font-size:13px; line-height:1.7; }
+          #fon-voice-interface .fon-vision-band { padding:clamp(28px,5vw,58px); border:1px solid rgba(0,194,255,.2); border-radius:24px; background:radial-gradient(ellipse at 90% 15%,rgba(0,194,255,.14),transparent 38%),linear-gradient(130deg,rgba(11,60,93,.92),rgba(10,37,64,.92)); }
+          #fon-voice-interface .fon-vision-band blockquote { max-width:900px; margin:18px 0 16px; color:#fff !important; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-size:clamp(25px,4vw,43px); line-height:1.24; letter-spacing:-.025em; }
+          #fon-voice-interface .fon-vision-band > p { margin:0; color:rgba(230,247,255,.85) !important; font-size:14px; line-height:1.6; }
+          #fon-voice-interface .fon-explore { padding:70px 0 48px; }
+          #fon-voice-interface .fon-explore .fon-section-heading { margin-bottom:25px; }
+          #fon-voice-interface .fon-mode-cards { grid-template-columns:repeat(3,minmax(0,1fr)); gap:15px; }
+          #fon-voice-interface .fon-mode-card { min-height:230px; padding:23px; }
+          #fon-voice-interface .fon-mode-card > span:not(.fon-card-topline) { font-size:13px; }
+          #fon-voice-interface .fon-responsibility { display:flex; align-items:flex-start; gap:16px; margin-top:15px; padding:21px 23px; border:1px solid rgba(230,247,255,.1); border-radius:16px; background:rgba(10,37,64,.4); }
+          #fon-voice-interface .fon-responsibility-mark { display:grid; width:26px; height:26px; flex:none; place-items:center; border:1px solid rgba(0,194,255,.45); border-radius:50%; color:#00c2ff; font-family:"Space Grotesk",ui-sans-serif,sans-serif; font-weight:700; }
+          #fon-voice-interface .fon-responsibility strong { color:#fff !important; font-size:13px; }
+          #fon-voice-interface .fon-responsibility p { margin:6px 0 0; color:rgba(230,247,255,.65) !important; font-size:12px; line-height:1.65; }
+          #fon-voice-interface .fon-site-footer { display:flex; width:min(1120px,100%); min-height:100px; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; margin:0 auto; border-top:1px solid rgba(230,247,255,.1); }
+          #fon-voice-interface .fon-site-footer > p { margin:0; color:rgba(230,247,255,.55) !important; font-size:12px; }
+          #fon-voice-interface .fon-site-footer > a:last-child { display:inline-flex; align-items:center; gap:8px; }
+          #fon-voice-interface .fon-landing [hidden] { display:none !important; }
+          @media (min-width:431px) {
+            .main:has(#fon-landing:not([hidden])),
+            .wrap:has(#fon-landing:not([hidden])),
+            .contain:has(#fon-landing:not([hidden])),
+            #component-7:has(#fon-landing:not([hidden])) {
+              width:100%; max-width:none; min-width:0; flex:1 1 auto;
+            }
+            .gradio-container:has(#fon-landing:not([hidden])) {
+              display:block; width:100%; height:auto; min-height:100dvh; overflow:visible;
+              padding:0 !important; align-items:stretch; justify-content:stretch;
+            }
+            #fon-voice-interface:has(#fon-landing:not([hidden])) {
+              position:relative; flex:none; width:100% !important; max-width:none;
+              height:auto; min-height:100dvh; overflow:visible; margin:0 !important;
+              border:0; border-radius:0; background:#0a2540; box-shadow:none;
+            }
+            #fon-voice-interface:has(#fon-landing:not([hidden])) #fon-landing {
+              position:relative; inset:auto; width:100%; height:auto; min-height:100dvh;
+              overflow:visible; padding:0 clamp(20px,5vw,76px);
+            }
+          }
+          @media (max-width:800px) {
+            #fon-voice-interface #fon-landing { padding:0 22px 0; }
+            #fon-voice-interface .fon-site-header { min-height:76px; gap:14px; }
+            #fon-voice-interface .fon-site-nav { gap:13px; }
+            #fon-voice-interface .fon-site-nav > a { display:none; }
+            #fon-voice-interface .fon-site-nav-cta { min-height:42px; padding:0 14px; font-size:12px; }
+            #fon-voice-interface .fon-landing-content { padding:32px 0 42px; }
+            #fon-voice-interface .fon-landing-hero { grid-template-columns:1fr; gap:30px; padding:35px 0 45px; }
+            #fon-voice-interface .fon-landing-copy h1 { max-width:12ch; font-size:clamp(47px,9vw,70px); }
+            #fon-voice-interface .fon-landing-art { width:min(100%,520px); min-height:340px; justify-self:center; }
+            #fon-voice-interface .fon-project-intro { grid-template-columns:1fr; gap:22px; padding:45px 0; }
+            #fon-voice-interface .fon-facts { grid-template-columns:1fr; margin-top:4px; }
+            #fon-voice-interface .fon-facts > div { min-height:auto; padding:18px 20px; }
+            #fon-voice-interface .fon-facts > div + div { border-top:1px solid rgba(255,255,255,.1); border-left:0; }
+            #fon-voice-interface .fon-approach { padding:48px 0; }
+            #fon-voice-interface .fon-approach-cards { grid-template-columns:1fr; }
+            #fon-voice-interface .fon-approach-card { min-height:0; }
+            #fon-voice-interface .fon-approach-card h3 { margin-top:15px; }
+            #fon-voice-interface .fon-vision-band { padding:28px; }
+            #fon-voice-interface .fon-explore { padding:48px 0 35px; }
+            #fon-voice-interface .fon-mode-cards { grid-template-columns:1fr; }
+            #fon-voice-interface .fon-mode-card { min-height:190px; }
+            #fon-voice-interface .fon-site-footer { justify-content:flex-start; padding:22px 0; }
+          }
+          @media (max-width:420px) {
+            #fon-voice-interface #fon-landing { padding:0 17px; }
+            #fon-voice-interface .fon-site-header { min-height:70px; }
+            #fon-voice-interface .fon-site-mark { width:37px; height:37px; }
+            #fon-voice-interface .fon-site-brand strong { font-size:15px; }
+            #fon-voice-interface .fon-site-brand small { font-size:10px; }
+            #fon-voice-interface .fon-site-nav-cta { min-height:39px; padding:0 11px; font-size:11px; }
+            #fon-voice-interface .fon-landing-copy h1 { margin-top:18px; font-size:47px; }
+            #fon-voice-interface .fon-landing-art { min-height:275px; }
+            #fon-voice-interface .fon-art-core { width:145px; height:145px; }
+            #fon-voice-interface .fon-art-word-one { left:7%; }
+            #fon-voice-interface .fon-art-word-two { right:4%; }
+            #fon-voice-interface .fon-art-caption { font-size:7px; letter-spacing:.1em; }
+            #fon-voice-interface .fon-vision-band { padding:23px; }
+            #fon-voice-interface .fon-responsibility { padding:17px; }
+          }
         </style>
         """,
         elem_id="fon-voice-interface",
     )
 
-    demo.load(fn=None, inputs=None, outputs=None, js=MICROPHONE_JS)
 
 
 web_app = FastAPI()
@@ -1467,6 +798,14 @@ async def fon_game_page():
             ),
         )
     return FileResponse(index_file, media_type="text/html")
+
+
+@web_app.get("/game-sw.js")
+async def fon_game_service_worker():
+    sw_file = GAME_FRONTEND_DIST / "game-sw.js"
+    if not sw_file.is_file():
+        raise HTTPException(status_code=404, detail="Service worker introuvable.")
+    return FileResponse(sw_file, media_type="application/javascript")
 
 
 def _voice_session_lock(session_id: str) -> asyncio.Lock:
@@ -1588,6 +927,8 @@ async def save_training_example_request(request: Request):
     assistant_fon_text_original = payload.get("assistant_fon_text_original")
     fon_answer = payload.get("assistant_fon_text")
     encoded_audio = payload.get("input_audio")
+    speaker_id = sanitize_speaker_field(payload.get("speaker_id"))
+    speaker_label = sanitize_speaker_field(payload.get("speaker_label"))
     if language not in ("Français", "Fon"):
         raise HTTPException(status_code=400, detail="La langue parlée est invalide.")
     if not isinstance(input_transcript, str) or not input_transcript.strip():
@@ -1632,6 +973,8 @@ async def save_training_example_request(request: Request):
             input_transcript.strip(),
             assistant_fon_text_original.strip(),
             fon_answer.strip(),
+            speaker_id,
+            speaker_label,
         )
     except Exception as error:
         LOGGER.exception("Could not save a consented Fon training example")
@@ -1641,6 +984,15 @@ async def save_training_example_request(request: Request):
         ) from error
 
     return {"sample_id": sample_id, "assistant_audio": assistant_audio}
+
+
+def sanitize_speaker_field(value, max_length=200):
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or len(value) > max_length:
+        return None
+    return value
 
 
 async def parse_training_phrase_payload(request: Request):
@@ -1715,7 +1067,7 @@ async def save_training_phrase_request(request: Request):
         raise HTTPException(status_code=400, detail="La traduction en fon est obligatoire.")
     if len(fon_text) > 500:
         raise HTTPException(status_code=400, detail="La traduction en fon dépasse 500 caractères.")
-    contribution_source = payload.get("source", "training")
+    contribution_source = payload.get("source") or "training"
     if contribution_source not in ("training", "game"):
         raise HTTPException(status_code=400, detail="La source de contribution est invalide.")
     mission_id = payload.get("mission_id")
@@ -1744,6 +1096,8 @@ async def save_training_phrase_request(request: Request):
         payload.get("synthesized_audio"),
         "L'audio synthétisé",
     )
+    speaker_id = sanitize_speaker_field(payload.get("speaker_id"))
+    speaker_label = sanitize_speaker_field(payload.get("speaker_label"))
     try:
         sample_id, audio = await run_in_threadpool(
             persist_training_phrase,
@@ -1755,6 +1109,8 @@ async def save_training_phrase_request(request: Request):
             mission_id.strip() if isinstance(mission_id, str) else None,
             mission_title.strip() if isinstance(mission_title, str) else None,
             contribution_source != "game",
+            speaker_id,
+            speaker_label,
         )
     except Exception as error:
         LOGGER.exception("Could not save a consented Fon phrase pair")
@@ -1772,7 +1128,7 @@ if GAME_FRONTEND_DIST.is_dir():
         name="game-assets",
     )
 
-web_app = gr.mount_gradio_app(web_app, demo, path="/")
+web_app = gr.mount_gradio_app(web_app, demo, path="/", head=FONT_HEAD_TAGS)
 
 
 if __name__ == "__main__":

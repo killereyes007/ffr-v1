@@ -11,6 +11,9 @@ __pycache__/
 /plot_fon_french_all.png
 /inference_model-20261029T225159Z-1-001.zip
 
+# Corpus JML-fon-speech-v1 (Hugging Face) : volumineux, telecharge localement
+/JML-fon-speech-v1/
+
 # Demo TTS : modeles/experiences (donnees vocales sensibles) et artefacts generes
 /tts_demo/models/
 /tts_demo/experiments/
