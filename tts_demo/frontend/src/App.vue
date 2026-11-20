@@ -1117,7 +1117,7 @@ async function saveCollecteContribution() {
   }
 }
 
-const { canInstall, installed, promptInstall } = usePwaInstall();
+const { canInstall, installed, isIosManualInstall, promptInstall } = usePwaInstall();
 const installStatus = ref("");
 
 async function handleInstallClick() {
@@ -1261,6 +1261,13 @@ onBeforeUnmount(() => {
         <span class="install-banner-arrow" aria-hidden="true">→</span>
       </button>
       <p v-if="installStatus" class="install-status" role="status">{{ installStatus }}</p>
+      <div v-if="isIosManualInstall && !installed" class="install-banner install-banner-ios">
+        <span class="install-banner-icon" aria-hidden="true">⬆︎</span>
+        <span class="install-banner-copy">
+          <strong>Installer sur cet iPhone</strong>
+          <small>Appuie sur <b>Partager</b> (le carré avec la flèche) en bas de Safari, puis <b>« Sur l'écran d'accueil »</b>.</small>
+        </span>
+      </div>
       <section class="welcome-hero">
         <span class="eyebrow">Une aventure à travers le Bénin</span>
         <h1>Fais entendre ta voix.</h1>

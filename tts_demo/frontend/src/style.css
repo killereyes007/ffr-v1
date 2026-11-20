@@ -641,6 +641,19 @@ h1 {
   background: linear-gradient(135deg, rgba(245, 196, 81, 0.26), rgba(245, 196, 81, 0.08));
 }
 
+.install-banner-ios {
+  cursor: default;
+}
+
+.install-banner-ios:hover {
+  border-color: rgba(245, 196, 81, 0.55);
+  background: linear-gradient(135deg, rgba(245, 196, 81, 0.18), rgba(245, 196, 81, 0.06));
+}
+
+.install-banner-ios b {
+  color: var(--gold);
+}
+
 .install-banner-icon {
   display: grid;
   width: 36px;

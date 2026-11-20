@@ -19,10 +19,24 @@ export function listenForInstallPrompt() {
   });
 }
 
+// iOS Safari never fires beforeinstallprompt — there is no API to trigger
+// "Add to Home Screen" from script there. The only thing we can do is detect
+// it and show instructions for the manual Share-sheet flow instead of a
+// button that would otherwise just silently never appear.
+function isIosSafari(): boolean {
+  const ua = window.navigator.userAgent;
+  const isIos = /iPad|iPhone|iPod/.test(ua) && !(window as unknown as { MSStream?: unknown }).MSStream;
+  const isStandalone =
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+    window.matchMedia?.("(display-mode: standalone)").matches;
+  return isIos && !isStandalone;
+}
+
 export function usePwaInstall() {
   return {
     canInstall: deferredPrompt,
     installed,
+    isIosManualInstall: isIosSafari(),
     async promptInstall() {
       const event = deferredPrompt.value;
       if (!event) return false;
