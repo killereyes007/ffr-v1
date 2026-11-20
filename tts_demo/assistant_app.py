@@ -225,7 +225,7 @@ FONT_HEAD_TAGS = """
 """
 
 
-with gr.Blocks(title="FFR — Fon, français et voix") as demo:
+with gr.Blocks(title="FFR — Fon, français et voix", head=FONT_HEAD_TAGS) as demo:
     gr.HTML(
         """
         <div id="fon-landing" class="fon-landing">
@@ -1128,7 +1128,13 @@ if GAME_FRONTEND_DIST.is_dir():
         name="game-assets",
     )
 
-web_app = gr.mount_gradio_app(web_app, demo, path="/", head=FONT_HEAD_TAGS)
+try:
+    web_app = gr.mount_gradio_app(web_app, demo, path="/", head=FONT_HEAD_TAGS)
+except TypeError:
+    # Older Gradio versions (<6, e.g. the gradio<5 pinned in requirements.txt)
+    # don't accept `head` on mount_gradio_app; the Blocks(head=...) passed
+    # above already covers font injection for those versions.
+    web_app = gr.mount_gradio_app(web_app, demo, path="/")
 
 
 if __name__ == "__main__":
