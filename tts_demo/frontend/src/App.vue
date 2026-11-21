@@ -216,7 +216,8 @@ const historyNotes: HistoryNote[] = [
 ];
 
 const missionNumber = ref(0);
-const activeScreen = ref<"home" | "game" | "assistant" | "collecte">("game");
+const activeScreen = ref<"home" | "game" | "assistant">("game");
+const contributionMode = ref<"mission" | "free">("mission");
 
 interface OnboardingSlide {
   title: string;
@@ -231,12 +232,14 @@ const onboardingSlides: OnboardingSlide[] = [
       "Un prototype de recherche sur le fon, créé pour explorer la traduction, la voix et la collecte de phrases avec les locuteurs. Ce n'est pas un produit fini : certaines réponses peuvent être imparfaites.",
   },
   {
-    title: "Cinq façons de participer",
+    title: "Quatre façons de participer",
     list: [
       { label: "Histoire", detail: "Les repères historiques du Bénin." },
-      { label: "Ma voix", detail: "Contribuer une traduction pendant une mission." },
+      {
+        label: "Ma voix",
+        detail: "Traduire une réplique de mission ou proposer librement ta propre phrase.",
+      },
       { label: "Assistant", detail: "Parler et écouter une réponse en fon." },
-      { label: "Collecte", detail: "Proposer une phrase fon librement." },
       { label: "Accueil", detail: "Revenir au point de départ à tout moment." },
     ],
   },
@@ -276,30 +279,44 @@ const routeStop = computed(
 );
 const historyOpen = ref(false);
 const selectedChoice = ref<Choice | null>(null);
-const fonText = ref("");
-const consent = ref(false);
-const humanAudio = ref<string | null>(null);
-const audioUrl = ref<string | null>(null);
-const recording = ref(false);
-const recordingStatus = ref("Enregistrement facultatif, 30 secondes maximum.");
 const gameStatus = ref("");
 const gameStatusType = ref<"info" | "error" | "success">("info");
 const missionFinished = ref(false);
 const savedContributions = ref(0);
-const saving = ref(false);
 const clock = ref("");
 const mission = computed(() => missions[missionNumber.value]);
 const isComplete = computed(() => missionNumber.value >= missions.length);
 const episodesPrepared = computed(() => missionNumber.value);
-const canSave = computed(
+
+// --- Contribution zone shared by "Phrase proposée" (mission) and "Ma phrase" (free) modes ---
+
+const contributionFrench = ref("");
+const contributionFon = ref("");
+const contributionAiAudioUrl = ref<string | null>(null);
+const contributionAiAudioBase64 = ref<string | null>(null);
+const contributionHumanAudio = ref<string | null>(null);
+const contributionAudioUrl = ref<string | null>(null);
+const contributionRecording = ref(false);
+const contributionPlayingAi = ref(false);
+const contributionRecordStatus = ref("Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.");
+const contributionConsent = ref(false);
+const contributionSelfReviewed = ref(false);
+const contributionSaving = ref(false);
+const contributionSaved = ref(false);
+const contributionStatus = ref("");
+const contributionStatusState = ref<"info" | "error" | "success">("info");
+const contributionAiAudioEl = ref<HTMLAudioElement | null>(null);
+
+const canSaveContribution = computed(
   () =>
     Boolean(
-      selectedChoice.value &&
-        fonText.value.trim() &&
-        humanAudio.value &&
-        consent.value &&
-        !recording.value &&
-        !saving.value,
+      contributionFrench.value.trim() &&
+        contributionFon.value.trim() &&
+        contributionHumanAudio.value &&
+        contributionConsent.value &&
+        contributionSelfReviewed.value &&
+        !contributionRecording.value &&
+        !contributionSaving.value,
     ),
 );
 
@@ -316,6 +333,7 @@ function updateClock() {
 
 function openHistoryNotebook() {
   activeScreen.value = "game";
+  contributionMode.value = "mission";
   if (isComplete.value) restartChapter();
   historyOpen.value = true;
   void nextTick(() => {
@@ -335,7 +353,7 @@ function scrollToMission() {
 
 function scrollToContribution() {
   activeScreen.value = "game";
-  if (!selectedChoice.value) {
+  if (contributionMode.value === "mission" && !selectedChoice.value) {
     setGameStatus("Choisis d'abord une réplique pour contribuer.");
     scrollToMission();
     return;
@@ -355,6 +373,7 @@ function showHome() {
 
 function startChapter() {
   activeScreen.value = "game";
+  contributionMode.value = "mission";
   void nextTick(() => {
     document.querySelector(".shell main")?.scrollTo({ top: 0 });
   });
@@ -365,13 +384,58 @@ function setGameStatus(message: string, type: "info" | "error" | "success" = "in
   gameStatusType.value = type;
 }
 
-function clearRecording() {
-  humanAudio.value = null;
-  if (audioUrl.value) URL.revokeObjectURL(audioUrl.value);
-  audioUrl.value = null;
+function clearContributionRecording() {
+  contributionHumanAudio.value = null;
+  if (contributionAudioUrl.value) URL.revokeObjectURL(contributionAudioUrl.value);
+  contributionAudioUrl.value = null;
 }
 
-watch(fonText, clearRecording);
+watch(contributionFon, clearContributionRecording);
+
+watch(contributionFrench, () => {
+  contributionSaved.value = false;
+  contributionStatus.value = "";
+});
+
+watch(contributionFon, () => {
+  contributionSaved.value = false;
+  contributionStatus.value = "";
+  contributionAiAudioBase64.value = null;
+  if (contributionAiAudioUrl.value) {
+    URL.revokeObjectURL(contributionAiAudioUrl.value);
+    contributionAiAudioUrl.value = null;
+  }
+});
+
+async function playContributionAiVoice() {
+  const text = contributionFon.value.trim();
+  if (!text) {
+    contributionRecordStatus.value = "Écris d'abord une traduction en fon.";
+    return;
+  }
+  contributionPlayingAi.value = true;
+  try {
+    const response = await fetch("/training-synthesis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fon_text: text }),
+    });
+    const result: unknown = await response.json();
+    const record = result as { detail?: string; audio?: string };
+    if (!response.ok) throw new Error(record.detail || "La synthèse n'a pas pu être générée.");
+    contributionAiAudioBase64.value = record.audio ?? null;
+    const audioBytes = Uint8Array.from(atob(String(record.audio)), (character) => character.charCodeAt(0));
+    if (contributionAiAudioUrl.value) URL.revokeObjectURL(contributionAiAudioUrl.value);
+    contributionAiAudioUrl.value = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
+    await nextTick();
+    await contributionAiAudioEl.value?.play();
+    contributionRecordStatus.value = "Lecture de la traduction en fon.";
+  } catch (error) {
+    contributionRecordStatus.value = `Erreur : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+  } finally {
+    contributionPlayingAi.value = false;
+  }
+}
 
 function encodeWav(chunks: Float32Array[], sampleRate: number): Blob {
   const frameCount = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -419,13 +483,13 @@ async function encodeBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-async function finishRecording() {
+async function finishContributionRecording() {
   if (!capture) return;
   if (stopTimer) clearTimeout(stopTimer);
   stopTimer = null;
   const activeCapture = capture;
   capture = null;
-  recording.value = false;
+  contributionRecording.value = false;
   try {
     activeCapture.processor.disconnect();
     activeCapture.source.disconnect();
@@ -433,29 +497,29 @@ async function finishRecording() {
     activeCapture.stream.getTracks().forEach((track) => track.stop());
     await activeCapture.context.close();
     if (!activeCapture.chunks.length) {
-      recordingStatus.value =
-        "Aucun son capturé. Réessaie ou continue sans contribuer.";
+      contributionRecordStatus.value =
+        "Aucun son capturé. Réessaie l'enregistrement.";
       return;
     }
     const blob = encodeWav(activeCapture.chunks, activeCapture.sampleRate);
-    humanAudio.value = await encodeBase64(blob);
-    audioUrl.value = URL.createObjectURL(blob);
-    recordingStatus.value = "Enregistrement prêt. Écoute-le avant de l'envoyer.";
+    contributionHumanAudio.value = await encodeBase64(blob);
+    contributionAudioUrl.value = URL.createObjectURL(blob);
+    contributionRecordStatus.value = "Enregistrement prêt. Écoute-le avant de l'envoyer.";
   } catch (error) {
-    recordingStatus.value = `Impossible de finaliser l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+    contributionRecordStatus.value = `Impossible de finaliser l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`;
   }
 }
 
-async function startRecording() {
-  if (!fonText.value.trim()) {
-    recordingStatus.value = "Écris d'abord la phrase en fon que tu vas lire.";
+async function startContributionRecording() {
+  if (!contributionFon.value.trim()) {
+    contributionRecordStatus.value = "Écris d'abord la phrase en fon que tu vas lire.";
     return;
   }
   if (!navigator.mediaDevices?.getUserMedia) {
-    recordingStatus.value = "L'accès au micro n'est pas disponible dans ce navigateur.";
+    contributionRecordStatus.value = "L'accès au micro n'est pas disponible dans ce navigateur.";
     return;
   }
-  recordingStatus.value = "Demande d'accès au microphone…";
+  contributionRecordStatus.value = "Demande d'accès au microphone…";
   let stream: MediaStream | null = null;
   let context: AudioContext | null = null;
   try {
@@ -488,23 +552,37 @@ async function startRecording() {
       chunks,
       sampleRate: context.sampleRate,
     };
-    clearRecording();
-    recording.value = true;
-    recordingStatus.value = "Enregistrement… lis la phrase en fon.";
-    stopTimer = setTimeout(() => void finishRecording(), 30_000);
+    clearContributionRecording();
+    contributionRecording.value = true;
+    contributionRecordStatus.value = "Enregistrement… lis la phrase en fon.";
+    stopTimer = setTimeout(() => void finishContributionRecording(), 30_000);
   } catch (error) {
     stream?.getTracks().forEach((track) => track.stop());
     if (context && context.state !== "closed") await context.close();
-    recordingStatus.value = `Impossible d'accéder au microphone : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+    contributionRecordStatus.value = `Impossible d'accéder au microphone : ${error instanceof Error ? error.message : "erreur inconnue"}`;
   }
+}
+
+function setContributionMode(mode: "mission" | "free") {
+  if (contributionMode.value === mode) return;
+  contributionMode.value = mode;
+  contributionFon.value = "";
+  contributionConsent.value = false;
+  contributionSelfReviewed.value = false;
+  clearContributionRecording();
+  contributionStatus.value = "";
+  contributionSaved.value = false;
+  contributionFrench.value = mode === "mission" ? selectedChoice.value?.text ?? "" : "";
 }
 
 function chooseReply(choice: Choice) {
   selectedChoice.value = choice;
   missionFinished.value = false;
-  fonText.value = "";
-  consent.value = false;
-  clearRecording();
+  contributionFrench.value = choice.text;
+  contributionFon.value = "";
+  contributionConsent.value = false;
+  contributionSelfReviewed.value = false;
+  clearContributionRecording();
   setGameStatus(
     "Réplique choisie. Tu peux la traduire et l'enregistrer, ou poursuivre sans contribuer.",
   );
@@ -523,9 +601,15 @@ function finishMission(contributed: boolean) {
 }
 
 async function saveContribution() {
-  if (!canSave.value || !selectedChoice.value || !mission.value) return;
-  saving.value = true;
-  setGameStatus("Envoi de la contribution au serveur du prototype…");
+  if (!canSaveContribution.value) return;
+  if (contributionMode.value === "mission" && (!selectedChoice.value || !mission.value)) return;
+  contributionSaving.value = true;
+  if (contributionMode.value === "mission") {
+    setGameStatus("Envoi de la contribution au serveur du prototype…");
+  } else {
+    contributionStatus.value = "Envoi de la contribution au serveur du prototype…";
+    contributionStatusState.value = "info";
+  }
   try {
     const identity = getSpeakerIdentity();
     const response = await fetch("/training-phrases", {
@@ -533,13 +617,14 @@ async function saveContribution() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         consent: true,
-        source: "game",
-        mission_id: mission.value.id,
-        mission_title: mission.value.title,
-        french_text: selectedChoice.value.text,
-        fon_text: fonText.value.trim(),
-        human_audio: humanAudio.value,
-        synthesized_audio: null,
+        source: contributionMode.value === "mission" ? "game_mission" : "free_collecte",
+        mission_id: contributionMode.value === "mission" ? mission.value?.id ?? null : null,
+        mission_title: contributionMode.value === "mission" ? mission.value?.title ?? null : null,
+        french_text: contributionFrench.value.trim(),
+        fon_text: contributionFon.value.trim(),
+        human_audio: contributionHumanAudio.value,
+        synthesized_audio: contributionAiAudioBase64.value,
+        self_reviewed: true,
         speaker_id: identity.speakerId,
         speaker_label: identity.speakerLabel,
       }),
@@ -552,15 +637,24 @@ async function saveContribution() {
           : "La contribution n'a pas pu être enregistrée.";
       throw new Error(detail);
     }
-    savedContributions.value += 1;
-    finishMission(true);
+    if (contributionMode.value === "mission") {
+      savedContributions.value += 1;
+      finishMission(true);
+    } else {
+      contributionSaved.value = true;
+      contributionStatus.value = "Contribution enregistrée. Merci !";
+      contributionStatusState.value = "success";
+    }
   } catch (error) {
-    setGameStatus(
-      `Échec de l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`,
-      "error",
-    );
+    const message = `Échec de l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+    if (contributionMode.value === "mission") {
+      setGameStatus(message, "error");
+    } else {
+      contributionStatus.value = message;
+      contributionStatusState.value = "error";
+    }
   } finally {
-    saving.value = false;
+    contributionSaving.value = false;
   }
 }
 
@@ -572,22 +666,26 @@ function nextMission() {
   missionNumber.value += 1;
   selectedChoice.value = null;
   missionFinished.value = false;
-  fonText.value = "";
-  consent.value = false;
-  clearRecording();
+  contributionFrench.value = "";
+  contributionFon.value = "";
+  contributionConsent.value = false;
+  contributionSelfReviewed.value = false;
+  clearContributionRecording();
   setGameStatus("");
-  recordingStatus.value = "Enregistrement facultatif, 30 secondes maximum.";
+  contributionRecordStatus.value = "Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.";
 }
 
 function restartChapter() {
   missionNumber.value = 0;
   selectedChoice.value = null;
   missionFinished.value = false;
-  fonText.value = "";
-  consent.value = false;
-  clearRecording();
+  contributionFrench.value = "";
+  contributionFon.value = "";
+  contributionConsent.value = false;
+  contributionSelfReviewed.value = false;
+  clearContributionRecording();
   setGameStatus("");
-  recordingStatus.value = "Enregistrement facultatif, 30 secondes maximum.";
+  contributionRecordStatus.value = "Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.";
 }
 
 // --- Assistant screen (voice conversation: mic -> ASR -> LLM -> traduction -> TTS) ---
@@ -606,15 +704,29 @@ const assistantProgressMode = ref<ProgressMode>("hidden");
 const assistantProgressValue = ref(0);
 const assistantTranscript = ref("");
 const assistantAnswer = ref("");
+const assistantAnswerFrench = ref("");
 const assistantResponseAudioUrl = ref<string | null>(null);
 const assistantShowReplay = ref(false);
-const assistantContributionVisible = ref(false);
-const assistantConsent = ref(false);
-const assistantContributionStatus = ref("");
-const assistantContributionStatusState = ref<"info" | "error" | "success">("info");
-const assistantContributionSaved = ref(false);
-const assistantSaving = ref(false);
+const assistantResponseReady = ref(false);
 const assistantAudioEl = ref<HTMLAudioElement | null>(null);
+
+function readStoredAssistantRecordConsent(): boolean {
+  try {
+    return localStorage.getItem("fonAssistantRecordConsent") === "1";
+  } catch {
+    return false;
+  }
+}
+
+const assistantRecordConsent = ref(readStoredAssistantRecordConsent());
+
+watch(assistantRecordConsent, (value) => {
+  try {
+    localStorage.setItem("fonAssistantRecordConsent", value ? "1" : "0");
+  } catch {
+    // ignored: best-effort preference persistence only
+  }
+});
 
 let assistantCapture: AudioCapture | null = null;
 let assistantProgressTimer: ReturnType<typeof setInterval> | null = null;
@@ -691,7 +803,7 @@ async function startAssistantRecording() {
   assistantAudioEl.value?.pause();
   assistantGuideState.value = "idle";
   assistantMicLabel.value = "Connexion…";
-  assistantContributionVisible.value = false;
+  assistantResponseReady.value = false;
   assistantLastInputWav = undefined;
   assistantRawInputTranscript = "";
   assistantRawAnswer = "";
@@ -701,7 +813,7 @@ async function startAssistantRecording() {
   assistantProgressMode.value = "hidden";
   assistantTranscript.value = "";
   assistantAnswer.value = "";
-  assistantContributionStatus.value = "";
+  assistantAnswerFrench.value = "";
   assistantStatus.value = "Connexion au microphone…";
   assistantStatusState.value = "info";
   try {
@@ -840,12 +952,12 @@ async function stopAssistantRecording() {
         if (assistantResponseAudioUrlObject) URL.revokeObjectURL(assistantResponseAudioUrlObject);
         assistantResponseAudioUrlObject = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
         assistantResponseAudioUrl.value = assistantResponseAudioUrlObject;
+        assistantAnswerFrench.value = String(event.french_answer ?? "");
         assistantProgressMode.value = "complete";
         assistantProgressValue.value = 100;
-        assistantContributionVisible.value = true;
-        assistantContributionSaved.value = false;
-        assistantConsent.value = false;
+        assistantResponseReady.value = true;
         void nextTick(() => void playAssistantResponse());
+        if (assistantRecordConsent.value) void silentlySaveAssistantExample();
       } else if (event.type === "error") {
         throw new Error(String(event.message));
       }
@@ -876,245 +988,47 @@ async function stopAssistantRecording() {
   }
 }
 
-async function saveAssistantContribution() {
-  if (!assistantConsent.value || !assistantLastInputWav || assistantContributionSaved.value) return;
-  const correctedTranscript = assistantTranscript.value.trim();
-  const correctedAnswer = assistantAnswer.value.trim();
-  if (!correctedTranscript || !correctedAnswer) {
-    assistantContributionStatus.value =
-      "La transcription et la réponse en fon doivent toutes les deux être renseignées.";
-    assistantContributionStatusState.value = "error";
-    return;
-  }
-  assistantSaving.value = true;
-  assistantContributionStatus.value = "Enregistrement local de la contribution…";
-  assistantContributionStatusState.value = "info";
+// Logs the raw question (audio + transcript) in the background for ASR research,
+// only when the user opted in via assistantRecordConsent. The AI-generated fon
+// answer is stored alongside for reference but is never presented to the user
+// as "their" contribution — see contributeAssistantAnswer() for that path.
+async function silentlySaveAssistantExample() {
+  if (!assistantLastInputWav) return;
   try {
     const identity = getSpeakerIdentity();
-    const response = await fetch("/training-examples", {
+    await fetch("/training-examples", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        consent: assistantConsent.value,
+        consent: true,
         language: assistantLanguage.value,
         input_audio: await encodeBase64(assistantLastInputWav),
         asr_transcript: assistantRawInputTranscript,
-        input_transcript: correctedTranscript,
+        input_transcript: assistantRawInputTranscript,
         assistant_fon_text_original: assistantRawAnswer,
-        assistant_fon_text: correctedAnswer,
+        assistant_fon_text: assistantRawAnswer,
         speaker_id: identity.speakerId,
         speaker_label: identity.speakerLabel,
       }),
     });
-    const data: unknown = await response.json();
-    const record = data as { detail?: string; sample_id?: string; assistant_audio?: string };
-    if (!response.ok) throw new Error(record.detail || "La contribution n'a pas pu être enregistrée.");
-    assistantContributionSaved.value = true;
-    assistantContributionStatus.value = `Enregistrée sur cet ordinateur (référence ${record.sample_id}).`;
-    assistantContributionStatusState.value = "success";
-    const audioBytes = Uint8Array.from(
-      atob(String(record.assistant_audio)),
-      (character) => character.charCodeAt(0),
-    );
-    if (assistantResponseAudioUrlObject) URL.revokeObjectURL(assistantResponseAudioUrlObject);
-    assistantResponseAudioUrlObject = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
-    assistantResponseAudioUrl.value = assistantResponseAudioUrlObject;
-    assistantShowReplay.value = true;
-  } catch (error) {
-    assistantContributionStatus.value = `Erreur : ${error instanceof Error ? error.message : "erreur inconnue"}`;
-    assistantContributionStatusState.value = "error";
-  } finally {
-    assistantSaving.value = false;
+  } catch {
+    // Best-effort background logging: failures are not surfaced to the user.
   }
 }
 
-// --- Collecte screen (phrase libre : texte + voix IA + voix humaine, sans contexte de mission) ---
-
-const collecteFrench = ref("");
-const collecteFon = ref("");
-const collecteAiAudioUrl = ref<string | null>(null);
-const collecteAiAudioBase64 = ref<string | null>(null);
-const collecteHumanAudio = ref<string | null>(null);
-const collecteHumanAudioUrl = ref<string | null>(null);
-const collecteRecording = ref(false);
-const collecteRecordStatus = ref("L'enregistrement de ta voix est facultatif. Clique à nouveau pour terminer.");
-const collectePlaying = ref(false);
-const collecteConsent = ref(false);
-const collecteSaveStatus = ref("");
-const collecteSaveStatusState = ref<"info" | "error" | "success">("info");
-const collecteSaving = ref(false);
-const collecteSaved = ref(false);
-const collecteAiAudioEl = ref<HTMLAudioElement | null>(null);
-
-let collecteCapture: AudioCapture | null = null;
-let collecteStopTimer: ReturnType<typeof setTimeout> | null = null;
-
-const canSaveCollecte = computed(() =>
-  Boolean(
-    collecteFrench.value.trim() &&
-      collecteFon.value.trim() &&
-      collecteConsent.value &&
-      !collecteRecording.value &&
-      !collecteSaving.value,
-  ),
-);
-
-watch([collecteFrench, collecteFon], () => {
-  collecteSaved.value = false;
-  collecteSaveStatus.value = "";
-});
-
-watch(collecteFon, () => {
-  collecteAiAudioBase64.value = null;
-  if (collecteAiAudioUrl.value) {
-    URL.revokeObjectURL(collecteAiAudioUrl.value);
-    collecteAiAudioUrl.value = null;
-  }
-});
-
-async function playCollecteAiVoice() {
-  const text = collecteFon.value.trim();
-  if (!text) {
-    collecteRecordStatus.value = "Écris d'abord une traduction en fon.";
-    return;
-  }
-  collectePlaying.value = true;
-  try {
-    const response = await fetch("/training-synthesis", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fon_text: text }),
-    });
-    const result: unknown = await response.json();
-    const record = result as { detail?: string; audio?: string };
-    if (!response.ok) throw new Error(record.detail || "La synthèse n'a pas pu être générée.");
-    collecteAiAudioBase64.value = record.audio ?? null;
-    const audioBytes = Uint8Array.from(atob(String(record.audio)), (character) => character.charCodeAt(0));
-    if (collecteAiAudioUrl.value) URL.revokeObjectURL(collecteAiAudioUrl.value);
-    collecteAiAudioUrl.value = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
-    await nextTick();
-    await collecteAiAudioEl.value?.play();
-    collecteRecordStatus.value = "Lecture de la traduction en fon.";
-  } catch (error) {
-    collecteRecordStatus.value = `Erreur : ${error instanceof Error ? error.message : "erreur inconnue"}`;
-  } finally {
-    collectePlaying.value = false;
-  }
-}
-
-async function startCollecteRecording() {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    collecteRecordStatus.value = "L'accès au micro n'est pas disponible dans ce navigateur.";
-    return;
-  }
-  collecteRecordStatus.value = "Connexion au microphone…";
-  let stream: MediaStream | null = null;
-  let context: AudioContext | null = null;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
-    context = new AudioContext();
-    await context.resume();
-    const source = context.createMediaStreamSource(stream);
-    const processor = context.createScriptProcessor(4096, 1, 1);
-    const silentOutput = context.createGain();
-    silentOutput.gain.value = 0;
-    const chunks: Float32Array[] = [];
-    processor.onaudioprocess = (event) => {
-      chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
-    };
-    source.connect(processor);
-    processor.connect(silentOutput);
-    silentOutput.connect(context.destination);
-    collecteCapture = { stream, context, source, processor, silentOutput, chunks, sampleRate: context.sampleRate };
-    collecteHumanAudio.value = null;
-    if (collecteHumanAudioUrl.value) URL.revokeObjectURL(collecteHumanAudioUrl.value);
-    collecteHumanAudioUrl.value = null;
-    collecteRecording.value = true;
-    collecteRecordStatus.value = "Enregistrement… lis la phrase en fon, puis termine l'enregistrement.";
-    collecteStopTimer = setTimeout(() => {
-      if (collecteRecording.value) {
-        collecteRecordStatus.value = "Limite de 30 secondes atteinte. Finalisation de l'enregistrement.";
-        void stopCollecteRecording();
-      }
-    }, 30_000);
-  } catch (error) {
-    stream?.getTracks().forEach((track) => track.stop());
-    if (context && context.state !== "closed") await context.close();
-    collecteRecordStatus.value = `Impossible d'accéder au micro : ${error instanceof Error ? error.message : "erreur inconnue"}`;
-  }
-}
-
-async function stopCollecteRecording() {
-  if (!collecteCapture) return;
-  if (collecteStopTimer) clearTimeout(collecteStopTimer);
-  collecteStopTimer = null;
-  const active = collecteCapture;
-  collecteCapture = null;
-  collecteRecording.value = false;
-  try {
-    active.processor.disconnect();
-    active.source.disconnect();
-    active.silentOutput.disconnect();
-    const sampleRate = active.context.sampleRate;
-    await active.context.close();
-    active.stream.getTracks().forEach((track) => track.stop());
-    const blob = encodeWav(active.chunks, sampleRate);
-    collecteHumanAudio.value = await encodeBase64(blob);
-    if (collecteHumanAudioUrl.value) URL.revokeObjectURL(collecteHumanAudioUrl.value);
-    collecteHumanAudioUrl.value = URL.createObjectURL(blob);
-    collecteRecordStatus.value = "Ta prononciation est prête à être enregistrée avec ton consentement.";
-  } catch (error) {
-    collecteRecordStatus.value = `Impossible de finaliser l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`;
-  }
-}
-
-async function saveCollecteContribution() {
-  const french = collecteFrench.value.trim();
-  const fon = collecteFon.value.trim();
-  if (!collecteConsent.value) return;
-  if (!french || !fon) {
-    collecteSaveStatus.value = "Renseigne la phrase française et sa traduction en fon.";
-    collecteSaveStatusState.value = "error";
-    return;
-  }
-  collecteSaving.value = true;
-  collecteSaveStatus.value = "Enregistrement local de la contribution…";
-  collecteSaveStatusState.value = "info";
-  try {
-    const identity = getSpeakerIdentity();
-    const response = await fetch("/training-phrases", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        consent: collecteConsent.value,
-        source: null,
-        mission_id: null,
-        mission_title: null,
-        french_text: french,
-        fon_text: fon,
-        human_audio: collecteHumanAudio.value,
-        synthesized_audio: collecteAiAudioBase64.value,
-        speaker_id: identity.speakerId,
-        speaker_label: identity.speakerLabel,
-      }),
-    });
-    const result: unknown = await response.json();
-    const record = result as { detail?: string; sample_id?: string; synthesized_audio?: string };
-    if (!response.ok) throw new Error(record.detail || "La contribution n'a pas pu être enregistrée.");
-    collecteSaved.value = true;
-    collecteSaveStatus.value = `Contribution enregistrée sur cet ordinateur (référence ${record.sample_id}).`;
-    collecteSaveStatusState.value = "success";
-    const bytes = Uint8Array.from(atob(String(record.synthesized_audio)), (character) => character.charCodeAt(0));
-    if (collecteAiAudioUrl.value) URL.revokeObjectURL(collecteAiAudioUrl.value);
-    collecteAiAudioUrl.value = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
-  } catch (error) {
-    collecteSaveStatus.value = `Erreur : ${error instanceof Error ? error.message : "erreur inconnue"}`;
-    collecteSaveStatusState.value = "error";
-  } finally {
-    collecteSaving.value = false;
-  }
+function contributeAssistantAnswer() {
+  activeScreen.value = "game";
+  contributionMode.value = "free";
+  contributionFrench.value = assistantAnswerFrench.value.trim();
+  contributionFon.value = assistantAnswer.value.trim();
+  contributionConsent.value = false;
+  contributionSelfReviewed.value = false;
+  clearContributionRecording();
+  contributionStatus.value = "";
+  contributionSaved.value = false;
+  void nextTick(() => {
+    document.querySelector("#contribution")?.scrollIntoView({ behavior: "smooth" });
+  });
 }
 
 const { canInstall, installed, isIosManualInstall, promptInstall } = usePwaInstall();
@@ -1130,9 +1044,13 @@ async function handleInstallClick() {
 onMounted(() => {
   updateClock();
   clockTimer = setInterval(updateClock, 60_000);
-  const requestedScreen = new URLSearchParams(window.location.search).get("screen");
-  if (requestedScreen === "assistant" || requestedScreen === "collecte") {
-    activeScreen.value = requestedScreen;
+  const params = new URLSearchParams(window.location.search);
+  const requestedScreen = params.get("screen");
+  if (requestedScreen === "assistant") {
+    activeScreen.value = "assistant";
+  } else if (requestedScreen === "game" && params.get("mode") === "free") {
+    activeScreen.value = "game";
+    setContributionMode("free");
   }
   if (!hasOnboarded()) {
     appStage.value = "onboarding";
@@ -1143,7 +1061,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (clockTimer) clearInterval(clockTimer);
   if (stopTimer) clearTimeout(stopTimer);
-  if (audioUrl.value) URL.revokeObjectURL(audioUrl.value);
+  if (contributionAudioUrl.value) URL.revokeObjectURL(contributionAudioUrl.value);
+  if (contributionAiAudioUrl.value) URL.revokeObjectURL(contributionAiAudioUrl.value);
   if (capture) {
     capture.stream.getTracks().forEach((track) => track.stop());
     void capture.context.close();
@@ -1154,13 +1073,6 @@ onBeforeUnmount(() => {
   if (assistantCapture) {
     assistantCapture.stream.getTracks().forEach((track) => track.stop());
     void assistantCapture.context.close();
-  }
-  if (collecteStopTimer) clearTimeout(collecteStopTimer);
-  if (collecteAiAudioUrl.value) URL.revokeObjectURL(collecteAiAudioUrl.value);
-  if (collecteHumanAudioUrl.value) URL.revokeObjectURL(collecteHumanAudioUrl.value);
-  if (collecteCapture) {
-    collecteCapture.stream.getTracks().forEach((track) => track.stop());
-    void collecteCapture.context.close();
   }
 });
 </script>
@@ -1306,7 +1218,7 @@ onBeforeUnmount(() => {
         <span class="welcome-action-icon" aria-hidden="true">◉</span>
         <span class="welcome-action-copy">
           <strong>Faire entendre ma voix</strong>
-          <small>Propose une formulation en fon et choisis si tu veux contribuer.</small>
+          <small>Traduis une réplique de mission ou propose librement ta propre phrase.</small>
           <b>Participer <span aria-hidden="true">→</span></b>
         </span>
       </button>
@@ -1318,18 +1230,32 @@ onBeforeUnmount(() => {
           <b>Ouvrir l'assistant <span aria-hidden="true">→</span></b>
         </span>
       </button>
-      <button class="welcome-action" type="button" @click="activeScreen = 'collecte'">
-        <span class="welcome-action-icon" aria-hidden="true">Aa</span>
-        <span class="welcome-action-copy">
-          <strong>Proposer une phrase</strong>
-          <small>Écris une traduction en fon et, si tu le souhaites, enregistre ta voix.</small>
-          <b>Contribuer <span aria-hidden="true">→</span></b>
-        </span>
-      </button>
-      <p class="welcome-note">Tes propositions restent facultatives et ne sont pas automatiquement vérifiées.</p>
+      <p class="welcome-note">Un enregistrement de ta voix est nécessaire pour qu'une contribution soit utile à l'entraînement d'une voix fon.</p>
     </main>
 
     <main v-else-if="activeScreen === 'game'">
+      <div class="contribution-mode-toggle" role="tablist" aria-label="Façon de contribuer">
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="contributionMode === 'mission'"
+          :class="{ 'is-active': contributionMode === 'mission' }"
+          @click="setContributionMode('mission')"
+        >
+          Phrase proposée
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="contributionMode === 'free'"
+          :class="{ 'is-active': contributionMode === 'free' }"
+          @click="setContributionMode('free')"
+        >
+          Ma phrase
+        </button>
+      </div>
+
+      <template v-if="contributionMode === 'mission'">
       <section v-if="!isComplete" class="chapter-intro">
         <div class="chapter-title-row">
           <div>
@@ -1627,105 +1553,12 @@ onBeforeUnmount(() => {
               type="button"
               :aria-pressed="selectedChoice?.text === choice.text"
               :class="{ 'is-selected': selectedChoice?.text === choice.text }"
-              :disabled="missionFinished || recording || saving"
+              :disabled="missionFinished || contributionRecording || contributionSaving"
               @click="chooseReply(choice)"
             >
               <span class="choice-index">{{ ["A", "B", "C"][index] }}</span>
               <span class="choice-text">{{ choice.text }}</span>
               <span class="choice-arrow" aria-hidden="true">↗</span>
-            </button>
-          </div>
-
-          <section v-if="selectedChoice && !missionFinished" id="contribution" class="task">
-            <div class="task-questline">
-              <span class="task-badge" aria-hidden="true">✦</span>
-              <div>
-                <span class="eyebrow">Quête facultative</span>
-                <h3>Prêter sa voix à la radio</h3>
-              </div>
-            </div>
-            <p>
-              Si tu parles fon, propose une formulation dont tu connais l'usage,
-              puis lis exactement ta phrase. Il n'y a pas de traduction attendue :
-              ta proposition devra être vérifiée par des locuteurs.
-            </p>
-            <label class="prompt-label" for="fon-text">Ta formulation en fon</label>
-            <textarea
-              id="fon-text"
-              v-model="fonText"
-              maxlength="500"
-              placeholder="Écris la phrase telle que tu la prononceras…"
-              :disabled="recording || saving"
-            ></textarea>
-            <div class="record-row">
-              <button
-                class="button button-secondary"
-                type="button"
-                :disabled="saving"
-                @click="recording ? finishRecording() : startRecording()"
-              >
-                {{ recording ? "■ Terminer l'enregistrement" : humanAudio ? "● Refaire mon enregistrement" : "● Enregistrer ma voix" }}
-              </button>
-              <span class="hint" role="status">{{ recordingStatus }}</span>
-            </div>
-            <audio
-              v-if="audioUrl"
-              ref="previewAudio"
-              :src="audioUrl"
-              controls
-              aria-label="Écouter mon enregistrement"
-            ></audio>
-            <label class="consent">
-              <input v-model="consent" type="checkbox" :disabled="recording || saving" />
-              <span>
-                Je suis majeur·e, je maîtrise suffisamment le fon pour proposer
-                cette phrase et j'enregistre uniquement ma voix. J'autorise la
-                conservation de ce texte et de cet enregistrement sur le serveur
-                qui héberge le prototype, pour l'évaluation et l'amélioration des
-                outils du projet. Je comprends que la contribution restera à
-                vérifier, ne sera pas publiée automatiquement et que je peux jouer
-                sans contribuer. Pour demander sa suppression, je contacterai le
-                responsable du projet.
-              </span>
-            </label>
-            <p class="hint">
-              Aucune donnée n'est envoyée à OpenRouter par ce jeu. N'enregistre
-              pas la voix d'une autre personne. La formulation et l'audio seront
-              conservés ensemble et marqués « à vérifier ».
-            </p>
-            <div class="actions">
-              <button
-                class="button button-secondary"
-                type="button"
-                :disabled="recording || saving"
-                @click="finishMission(false)"
-              >
-                Continuer sans contribuer
-              </button>
-              <button
-                class="button"
-                type="button"
-                :disabled="!canSave"
-                @click="saveContribution"
-              >
-                {{ saving ? "Enregistrement…" : "Enregistrer ma contribution" }}
-              </button>
-            </div>
-          </section>
-
-          <p class="status" :data-state="gameStatusType" role="status" aria-live="polite">
-            {{ gameStatus }}
-          </p>
-          <div v-if="missionFinished" class="mission-reward">
-            <span class="reward-star" aria-hidden="true">✦</span>
-            <div>
-              <strong>Épisode prêt pour la radio fictive</strong>
-              <span>{{ selectedChoice?.outcome }}</span>
-            </div>
-          </div>
-          <div v-if="missionFinished" class="actions">
-            <button class="button" type="button" @click="nextMission">
-              {{ missionNumber === missions.length - 1 ? "Terminer le chapitre" : "Mission suivante →" }}
             </button>
           </div>
         </div>
@@ -1751,14 +1584,168 @@ onBeforeUnmount(() => {
           Rejouer le chapitre
         </button>
       </section>
+      </template>
+
+      <section v-else class="card free-contribution-intro">
+        <span class="eyebrow">Phrase libre</span>
+        <h1>Propose ta propre phrase</h1>
+        <p>
+          Écris une phrase en français, sa traduction en fon, écoute la voix de l'IA si tu le
+          souhaites, puis lis ta phrase à voix haute : l'enregistrement est nécessaire pour que
+          cette contribution serve à entraîner une voix fon.
+        </p>
+      </section>
+
+      <section
+        v-if="contributionMode === 'free' || (!isComplete && selectedChoice && !missionFinished)"
+        id="contribution"
+        class="card task"
+      >
+        <div class="task-questline">
+          <span class="task-badge" aria-hidden="true">✦</span>
+          <div>
+            <span class="eyebrow">{{ contributionMode === 'mission' ? "Quête facultative" : "Contribution libre" }}</span>
+            <h3>{{ contributionMode === 'mission' ? "Prêter sa voix à la radio" : "Partager une traduction et sa prononciation" }}</h3>
+          </div>
+        </div>
+        <p v-if="contributionMode === 'mission'">
+          Propose une formulation en fon dont tu connais l'usage, puis lis exactement ta phrase à
+          voix haute : l'enregistrement est nécessaire pour contribuer.
+        </p>
+        <p v-else>
+          Écris une phrase en français, sa traduction en fon, puis lis-la à voix haute.
+        </p>
+
+        <template v-if="contributionMode === 'mission'">
+          <span class="prompt-label">Phrase proposée</span>
+          <p class="locked-text">{{ contributionFrench }}</p>
+        </template>
+        <template v-else>
+          <label class="prompt-label" for="contribution-french">Ta phrase en français</label>
+          <textarea
+            id="contribution-french"
+            v-model="contributionFrench"
+            rows="2"
+            maxlength="500"
+            placeholder="Exemple : Bonjour, comment vas-tu ?"
+            :disabled="contributionRecording || contributionSaving"
+          ></textarea>
+        </template>
+
+        <label class="prompt-label" for="contribution-fon">Ta traduction en fon</label>
+        <textarea
+          id="contribution-fon"
+          v-model="contributionFon"
+          rows="3"
+          maxlength="500"
+          placeholder="Écris la phrase telle que tu la prononceras…"
+          :disabled="contributionRecording || contributionSaving"
+        ></textarea>
+        <div class="record-row">
+          <button
+            class="button button-secondary"
+            type="button"
+            :disabled="contributionPlayingAi"
+            @click="playContributionAiVoice"
+          >
+            ▶ Écouter la voix de l'IA
+          </button>
+          <button
+            class="button button-secondary"
+            type="button"
+            :disabled="contributionSaving"
+            @click="contributionRecording ? finishContributionRecording() : startContributionRecording()"
+          >
+            {{ contributionRecording ? "■ Terminer l'enregistrement" : contributionHumanAudio ? "● Refaire mon enregistrement" : "● Enregistrer ma voix (obligatoire)" }}
+          </button>
+        </div>
+        <span class="hint" role="status">{{ contributionRecordStatus }}</span>
+        <audio
+          v-if="contributionAiAudioUrl"
+          ref="contributionAiAudioEl"
+          :src="contributionAiAudioUrl"
+          controls
+          aria-label="Écouter la voix de l'IA"
+        ></audio>
+        <audio
+          v-if="contributionAudioUrl"
+          :src="contributionAudioUrl"
+          controls
+          aria-label="Écouter mon enregistrement"
+        ></audio>
+        <label class="consent">
+          <input v-model="contributionConsent" type="checkbox" :disabled="contributionRecording || contributionSaving" />
+          <span>
+            Je suis majeur·e, je maîtrise suffisamment le fon pour proposer cette phrase et
+            j'enregistre uniquement ma voix. J'autorise la conservation de ce texte et de cet
+            enregistrement sur le serveur qui héberge le prototype, pour l'évaluation et
+            l'amélioration des outils du projet. Je comprends que la contribution restera à
+            vérifier. Pour demander sa suppression, je contacterai le responsable du projet.
+          </span>
+        </label>
+        <label class="consent">
+          <input
+            v-model="contributionSelfReviewed"
+            type="checkbox"
+            :disabled="contributionRecording || contributionSaving"
+          />
+          <span>Je confirme que cette phrase et cet enregistrement sont corrects.</span>
+        </label>
+        <p class="hint">
+          Aucune donnée n'est envoyée à OpenRouter par ce jeu. N'enregistre pas la voix d'une
+          autre personne. Un enregistrement de ta voix est obligatoire pour que cette
+          contribution serve de référence pour entraîner une voix fon.
+        </p>
+        <div class="actions">
+          <button
+            v-if="contributionMode === 'mission'"
+            class="button button-secondary"
+            type="button"
+            :disabled="contributionRecording || contributionSaving"
+            @click="finishMission(false)"
+          >
+            Continuer sans contribuer
+          </button>
+          <button class="button" type="button" :disabled="!canSaveContribution" @click="saveContribution">
+            {{
+              contributionSaving
+                ? "Enregistrement…"
+                : contributionSaved && contributionMode === "free"
+                  ? "Contribution enregistrée"
+                  : "Enregistrer ma contribution"
+            }}
+          </button>
+        </div>
+      </section>
+
+      <template v-if="contributionMode === 'mission'">
+        <p v-if="!isComplete && mission" class="status" :data-state="gameStatusType" role="status" aria-live="polite">
+          {{ gameStatus }}
+        </p>
+        <div v-if="!isComplete && missionFinished" class="mission-reward">
+          <span class="reward-star" aria-hidden="true">✦</span>
+          <div>
+            <strong>Épisode prêt pour la radio fictive</strong>
+            <span>{{ selectedChoice?.outcome }}</span>
+          </div>
+        </div>
+        <div v-if="!isComplete && missionFinished" class="actions">
+          <button class="button" type="button" @click="nextMission">
+            {{ missionNumber === missions.length - 1 ? "Terminer le chapitre" : "Mission suivante →" }}
+          </button>
+        </div>
+      </template>
+      <p v-else class="status" :data-state="contributionStatusState" role="status" aria-live="polite">
+        {{ contributionStatus }}
+      </p>
 
       <p class="small-note">
         La radio et ses personnages sont fictifs. Les phrases françaises sont
-        des invites, pas des traductions validées ; les contributions ne sont
-        pas automatiquement vérifiées ni utilisées pour entraîner un modèle.
-        Les données restent sur le serveur du prototype. Une collecte publique
-        exige des règles de consentement, de retrait et de gouvernance définies
-        avec les communautés concernées.
+        des invites, pas des traductions validées ; les contributions libres
+        et les contributions de mission restent à vérifier par des locuteurs
+        avant tout usage en entraînement. Les données restent sur le serveur
+        du prototype. Une collecte publique exige des règles de consentement,
+        de retrait et de gouvernance définies avec les communautés concernées.
       </p>
     </main>
 
@@ -1858,6 +1845,13 @@ onBeforeUnmount(() => {
         </button>
       </section>
       <section class="card assistant-transcript">
+        <label class="consent assistant-record-consent">
+          <input v-model="assistantRecordConsent" type="checkbox" />
+          <span>
+            Enregistrer mes questions (audio) pour améliorer la reconnaissance vocale. La réponse
+            générée par l'IA n'est jamais utilisée comme voix humaine de référence.
+          </span>
+        </label>
         <h2>Ta parole</h2>
         <p class="hint">Corrige la transcription si nécessaire.</p>
         <label class="prompt-label" for="assistant-transcript">Transcription reconnue</label>
@@ -1882,89 +1876,18 @@ onBeforeUnmount(() => {
           preload="metadata"
           @ended="onAssistantAudioEnded"
         ></audio>
-        <div v-if="assistantContributionVisible" class="contribution-box">
-          <label class="consent">
-            <input v-model="assistantConsent" type="checkbox" />
-            <span>J'accepte de sauvegarder cet échange pour contribuer à l'amélioration des modèles.</span>
-          </label>
+        <div v-if="assistantResponseReady" class="contribution-box">
           <p class="hint">
-            Audio et textes conservés sur le serveur du prototype. L'audio de réponse sera régénéré
-            après correction ; il est synthétique et ne sert pas de voix humaine cible pour le TTS.
+            Cette réponse est générée par l'IA, elle n'est pas lue par un humain. Lis-la toi-même à
+            voix haute pour qu'elle compte comme une vraie contribution vocale.
           </p>
-          <button
-            class="button"
-            type="button"
-            :disabled="!assistantConsent || assistantContributionSaved || assistantSaving"
-            @click="saveAssistantContribution"
-          >
-            {{ assistantContributionSaved ? "Contribution enregistrée" : assistantSaving ? "Enregistrement…" : "Enregistrer ma contribution" }}
+          <button class="button button-secondary" type="button" @click="contributeAssistantAnswer">
+            Lire cette réponse à voix haute pour contribuer →
           </button>
-          <p class="status" :data-state="assistantContributionStatusState" role="status" aria-live="polite">
-            {{ assistantContributionStatus }}
-          </p>
         </div>
       </section>
     </main>
 
-    <main v-else-if="activeScreen === 'collecte'" class="collecte-screen">
-      <section class="card">
-        <span class="eyebrow">Collecte de phrases</span>
-        <h1>Partage une traduction et sa prononciation</h1>
-        <p class="story-copy">
-          Écris une phrase en français, sa traduction en fon, écoute la voix de l'IA puis enregistre
-          une voix humaine si tu le souhaites.
-        </p>
-        <label class="prompt-label" for="collecte-french">Phrase en français</label>
-        <textarea
-          id="collecte-french"
-          v-model="collecteFrench"
-          rows="2"
-          maxlength="500"
-          placeholder="Exemple : Bonjour, comment vas-tu ?"
-        ></textarea>
-        <label class="prompt-label" for="collecte-fon">Traduction en fon</label>
-        <textarea
-          id="collecte-fon"
-          v-model="collecteFon"
-          rows="3"
-          maxlength="500"
-          placeholder="Écris ici la traduction en fon."
-        ></textarea>
-        <div class="record-row">
-          <button class="button button-secondary" type="button" :disabled="collectePlaying" @click="playCollecteAiVoice">
-            ▶ Écouter la voix de l'IA
-          </button>
-          <button
-            class="button button-secondary"
-            type="button"
-            @click="collecteRecording ? stopCollecteRecording() : startCollecteRecording()"
-          >
-            {{ collecteRecording ? "■ Terminer l'enregistrement" : collecteHumanAudio ? "● Refaire mon enregistrement" : "● Enregistrer ma voix" }}
-          </button>
-        </div>
-        <audio v-if="collecteAiAudioUrl" ref="collecteAiAudioEl" :src="collecteAiAudioUrl" controls></audio>
-        <audio v-if="collecteHumanAudioUrl" :src="collecteHumanAudioUrl" controls></audio>
-        <p class="hint" role="status">{{ collecteRecordStatus }}</p>
-        <label class="consent">
-          <input v-model="collecteConsent" type="checkbox" />
-          <span>
-            J'accepte de sauvegarder ces textes et l'enregistrement de ma voix (s'il existe) pour
-            contribuer à l'amélioration des modèles.
-          </span>
-        </label>
-        <p class="hint">
-          Les données restent sur le serveur du prototype. La voix de l'IA est conservée pour
-          comparaison, mais seule ta lecture humaine peut servir de référence vocale pour entraîner
-          le TTS. Tu peux enregistrer la paire de textes sans ajouter d'audio humain.
-        </p>
-        <button class="button" type="button" :disabled="!canSaveCollecte" @click="saveCollecteContribution">
-          {{ collecteSaved ? "Contribution enregistrée" : collecteSaving ? "Enregistrement…" : "Enregistrer cette contribution" }}
-        </button>
-        <p class="status" :data-state="collecteSaveStatusState" role="status" aria-live="polite">
-          {{ collecteSaveStatus }}
-        </p>
-      </section>
-    </main>
     <nav class="phone-nav" aria-label="Navigation du jeu">
       <button
         class="phone-nav-item"
@@ -1992,15 +1915,6 @@ onBeforeUnmount(() => {
       >
         <span aria-hidden="true">◈</span>
         <span>Assistant</span>
-      </button>
-      <button
-        class="phone-nav-item"
-        :class="{ 'is-active': activeScreen === 'collecte' }"
-        type="button"
-        @click="activeScreen = 'collecte'"
-      >
-        <span aria-hidden="true">Aa</span>
-        <span>Collecte</span>
       </button>
       <button
         class="phone-nav-item"

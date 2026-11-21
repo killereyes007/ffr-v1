@@ -144,25 +144,24 @@ def persist_training_phrase(
     fon_text,
     human_audio,
     synthesized_audio,
-    contribution_source="training",
+    contribution_source="free_collecte",
     mission_id=None,
     mission_title=None,
     generate_synthesis=True,
     speaker_id=None,
     speaker_label=None,
+    self_reviewed=False,
 ):
     phrase_dir = DATASET_DIR / "phrase-pairs"
     phrase_dir.mkdir(parents=True, exist_ok=True)
     sample_id = str(uuid.uuid4())
     if synthesized_audio is None and generate_synthesis:
         synthesized_audio = base64.b64decode(encode_audio_wav(synthesize(fon_text)))
-    human_audio_role = None
-    if human_audio:
-        human_audio_role = (
-            "human_recording_for_review"
-            if contribution_source == "game"
-            else "human_tts_training_target"
-        )
+    human_audio_role = (
+        "human_recording_for_review"
+        if contribution_source == "game_mission"
+        else "human_tts_training_target"
+    )
     metadata = {
         "schema_version": 1,
         "sample_id": sample_id,
@@ -171,7 +170,7 @@ def persist_training_phrase(
         "speaker_id": speaker_id,
         "speaker_label": speaker_label,
         "contribution_source": contribution_source,
-        "review_status": "unreviewed",
+        "review_status": "self-reviewed" if self_reviewed else "unreviewed",
         "mission_id": mission_id,
         "mission_title": mission_title,
         "french_text": french_text,
@@ -327,10 +326,10 @@ with gr.Blocks(title="FFR — Fon, français et voix", head=FONT_HEAD_TAGS) as d
                   <span>Explore un chapitre pilote autour d’une radio fictive et de la parole au quotidien.</span>
                   <span class="fon-mode-action">Explorer le carnet <b aria-hidden="true">→</b></span>
                 </a>
-                <a id="fon-open-training" class="fon-mode-card" href="/game?screen=collecte">
+                <a id="fon-open-training" class="fon-mode-card" href="/game?screen=game&mode=free">
                   <span class="fon-card-topline"><span class="fon-mode-icon fon-mode-icon-training" aria-hidden="true">Aa</span><span class="fon-card-tag">Contribution</span></span>
                   <strong>Découvrir la collecte</strong>
-                  <span>Propose une paire de phrases et, si tu le souhaites, un enregistrement vocal.</span>
+                  <span>Propose ta propre phrase en français et sa traduction en fon, puis lis-la à voix haute.</span>
                   <span class="fon-mode-action">Voir le parcours <b aria-hidden="true">→</b></span>
                 </a>
               </div>
@@ -871,6 +870,7 @@ async def voice_turn_request(request: Request):
                         "type": "done",
                         "audio": encode_audio_wav(response_audio),
                         "fon_answer": turn.fon_answer,
+                        "french_answer": turn.french_answer,
                     }
                 )
             except (AssistantASRError, AssistantPipelineError, gr.Error) as error:
@@ -1067,12 +1067,12 @@ async def save_training_phrase_request(request: Request):
         raise HTTPException(status_code=400, detail="La traduction en fon est obligatoire.")
     if len(fon_text) > 500:
         raise HTTPException(status_code=400, detail="La traduction en fon dépasse 500 caractères.")
-    contribution_source = payload.get("source") or "training"
-    if contribution_source not in ("training", "game"):
+    contribution_source = payload.get("source") or "free_collecte"
+    if contribution_source not in ("game_mission", "free_collecte"):
         raise HTTPException(status_code=400, detail="La source de contribution est invalide.")
     mission_id = payload.get("mission_id")
     mission_title = payload.get("mission_title")
-    if contribution_source == "game":
+    if contribution_source == "game_mission":
         if (
             not isinstance(mission_id, str)
             or not mission_id.strip()
@@ -1086,11 +1086,17 @@ async def save_training_phrase_request(request: Request):
         ):
             raise HTTPException(status_code=400, detail="Le titre de mission est invalide.")
 
-    human_audio = decode_training_phrase_audio(payload.get("human_audio"), "L'audio humain")
-    if contribution_source == "game" and human_audio is None:
+    if payload.get("self_reviewed") is not True:
         raise HTTPException(
             status_code=400,
-            detail="Un enregistrement vocal est requis pour cette contribution au jeu.",
+            detail="Merci de confirmer que la phrase et l'enregistrement sont corrects.",
+        )
+
+    human_audio = decode_training_phrase_audio(payload.get("human_audio"), "L'audio humain")
+    if human_audio is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Un enregistrement vocal est requis pour cette contribution.",
         )
     synthesized_audio = decode_training_phrase_audio(
         payload.get("synthesized_audio"),
@@ -1108,9 +1114,10 @@ async def save_training_phrase_request(request: Request):
             contribution_source,
             mission_id.strip() if isinstance(mission_id, str) else None,
             mission_title.strip() if isinstance(mission_title, str) else None,
-            contribution_source != "game",
+            True,
             speaker_id,
             speaker_label,
+            True,
         )
     except Exception as error:
         LOGGER.exception("Could not save a consented Fon phrase pair")

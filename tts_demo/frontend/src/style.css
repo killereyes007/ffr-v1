@@ -820,6 +820,58 @@ h1 {
   border-top: 1px solid var(--line);
 }
 
+#contribution.task {
+  margin-top: 13px;
+  padding-top: 19px;
+  border-top: 0;
+}
+
+.contribution-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.contribution-mode-toggle button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #c6cce0;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.contribution-mode-toggle button.is-active {
+  border-color: var(--gold);
+  background: rgba(245, 196, 81, 0.14);
+  color: var(--gold);
+}
+
+.free-contribution-intro p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.locked-text {
+  margin: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(7, 11, 29, 0.72);
+  color: #fff;
+  font-size: 14px;
+}
+
+.assistant-record-consent {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
 .task h3 {
   margin: 0 0 6px;
   font-size: 18px;
@@ -980,7 +1032,7 @@ audio {
   display: grid;
   min-height: 68px;
   flex: none;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   align-items: stretch;
   margin: 0 -18px;
   padding: 5px 8px max(7px, env(safe-area-inset-bottom));
