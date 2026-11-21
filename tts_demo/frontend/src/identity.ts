@@ -43,6 +43,17 @@ export function saveIdentity(label: string): SpeakerIdentity {
   return { speakerId, speakerLabel };
 }
 
+// Read-only, side-effect-free lookup for telemetry: unlike getSpeakerIdentity(),
+// this never creates or persists an identity, so logging an event before the
+// identify step can't silently mark onboarding as done.
+export function peekSpeakerId(): string | null {
+  try {
+    return localStorage.getItem(SPEAKER_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function getSpeakerIdentity(): SpeakerIdentity {
   try {
     const storedId = localStorage.getItem(SPEAKER_ID_KEY);

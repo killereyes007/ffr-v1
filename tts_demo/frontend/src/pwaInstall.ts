@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import { logEvent } from "./analytics";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -12,6 +13,7 @@ export function listenForInstallPrompt() {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferredPrompt.value = event as BeforeInstallPromptEvent;
+    logEvent("pwa_install_prompt_shown");
   });
   window.addEventListener("appinstalled", () => {
     deferredPrompt.value = null;
@@ -43,6 +45,7 @@ export function usePwaInstall() {
       await event.prompt();
       const choice = await event.userChoice;
       deferredPrompt.value = null;
+      logEvent(choice.outcome === "accepted" ? "pwa_install_accepted" : "pwa_install_dismissed");
       return choice.outcome === "accepted";
     },
   };

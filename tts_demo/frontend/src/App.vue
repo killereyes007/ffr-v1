@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { usePwaInstall } from "./pwaInstall";
 import { generateDefaultLabel, getSpeakerIdentity, hasOnboarded, saveIdentity } from "./identity";
+import { logEvent } from "./analytics";
 
 interface Choice {
   text: string;
@@ -263,21 +264,38 @@ function nextOnboardingSlide() {
     return;
   }
   onboardingSlideIndex.value += 1;
+  logEvent("onboarding_step_view", { slide_index: onboardingSlideIndex.value });
 }
 
 function goToIdentify() {
+  logEvent("onboarding_complete");
   appStage.value = "identify";
   speakerLabelInput.value = generateDefaultLabel();
 }
 
 function confirmIdentity() {
   saveIdentity(speakerLabelInput.value);
+  logEvent("identify_complete", { speaker_label: speakerLabelInput.value });
   appStage.value = "ready";
 }
 const routeStop = computed(
   () => routeStops[Math.min(missionNumber.value, routeStops.length - 1)],
 );
 const historyOpen = ref(false);
+
+const currentScreenName = computed<string | null>(() => {
+  if (appStage.value !== "ready") return null;
+  if (activeScreen.value === "game") return historyOpen.value ? "histoire" : "ma_voix";
+  return activeScreen.value;
+});
+
+watch(
+  currentScreenName,
+  (value) => {
+    if (value) logEvent("screen_view", { screen: value });
+  },
+  { immediate: true },
+);
 const selectedChoice = ref<Choice | null>(null);
 const gameStatus = ref("");
 const gameStatusType = ref<"info" | "error" | "success">("info");
@@ -323,6 +341,7 @@ const canSaveContribution = computed(
 let capture: AudioCapture | null = null;
 let stopTimer: ReturnType<typeof setTimeout> | null = null;
 let clockTimer: ReturnType<typeof setInterval> | null = null;
+let contributionRecordingStartedAt: number | null = null;
 
 function updateClock() {
   clock.value = new Intl.DateTimeFormat("fr-FR", {
@@ -391,6 +410,10 @@ function clearContributionRecording() {
 }
 
 watch(contributionFon, clearContributionRecording);
+
+watch(contributionSelfReviewed, (value) => {
+  if (value) logEvent("self_review_checked", { screen: contributionMode.value });
+});
 
 watch(contributionFrench, () => {
   contributionSaved.value = false;
@@ -505,6 +528,11 @@ async function finishContributionRecording() {
     contributionHumanAudio.value = await encodeBase64(blob);
     contributionAudioUrl.value = URL.createObjectURL(blob);
     contributionRecordStatus.value = "Enregistrement prêt. Écoute-le avant de l'envoyer.";
+    const durationSeconds = contributionRecordingStartedAt
+      ? Math.round((performance.now() - contributionRecordingStartedAt) / 100) / 10
+      : null;
+    contributionRecordingStartedAt = null;
+    logEvent("recording_complete", { screen: contributionMode.value, duration_seconds: durationSeconds });
   } catch (error) {
     contributionRecordStatus.value = `Impossible de finaliser l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`;
   }
@@ -554,7 +582,9 @@ async function startContributionRecording() {
     };
     clearContributionRecording();
     contributionRecording.value = true;
+    contributionRecordingStartedAt = performance.now();
     contributionRecordStatus.value = "Enregistrement… lis la phrase en fon.";
+    logEvent("recording_start", { screen: contributionMode.value });
     stopTimer = setTimeout(() => void finishContributionRecording(), 30_000);
   } catch (error) {
     stream?.getTracks().forEach((track) => track.stop());
@@ -573,6 +603,7 @@ function setContributionMode(mode: "mission" | "free") {
   contributionStatus.value = "";
   contributionSaved.value = false;
   contributionFrench.value = mode === "mission" ? selectedChoice.value?.text ?? "" : "";
+  logEvent("mode_switch", { mode });
 }
 
 function chooseReply(choice: Choice) {
@@ -586,6 +617,7 @@ function chooseReply(choice: Choice) {
   setGameStatus(
     "Réplique choisie. Tu peux la traduire et l'enregistrer, ou poursuivre sans contribuer.",
   );
+  logEvent("mission_start", { mission_id: mission.value?.id });
 }
 
 function finishMission(contributed: boolean) {
@@ -598,18 +630,28 @@ function finishMission(contributed: boolean) {
       : `Mission accomplie : ${selectedChoice.value.outcome} Aucun texte ni audio n'a été enregistré.`,
     contributed ? "success" : "info",
   );
+  logEvent("mission_complete", { mission_id: currentMission.id, contributed });
+}
+
+function classifySaveFailure(error: unknown): "network" | "server_error" | "validation" {
+  if (error instanceof TypeError) return "network";
+  const status = (error as { status?: number } | null)?.status;
+  if (typeof status === "number" && status >= 400 && status < 500) return "validation";
+  return "server_error";
 }
 
 async function saveContribution() {
   if (!canSaveContribution.value) return;
   if (contributionMode.value === "mission" && (!selectedChoice.value || !mission.value)) return;
   contributionSaving.value = true;
+  const source = contributionMode.value === "mission" ? "game_mission" : "free_collecte";
   if (contributionMode.value === "mission") {
     setGameStatus("Envoi de la contribution au serveur du prototype…");
   } else {
     contributionStatus.value = "Envoi de la contribution au serveur du prototype…";
     contributionStatusState.value = "info";
   }
+  logEvent("save_attempt", { source });
   try {
     const identity = getSpeakerIdentity();
     const response = await fetch("/training-phrases", {
@@ -617,7 +659,7 @@ async function saveContribution() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         consent: true,
-        source: contributionMode.value === "mission" ? "game_mission" : "free_collecte",
+        source,
         mission_id: contributionMode.value === "mission" ? mission.value?.id ?? null : null,
         mission_title: contributionMode.value === "mission" ? mission.value?.title ?? null : null,
         french_text: contributionFrench.value.trim(),
@@ -635,8 +677,11 @@ async function saveContribution() {
         typeof data === "object" && data !== null && "detail" in data
           ? String(data.detail)
           : "La contribution n'a pas pu être enregistrée.";
-      throw new Error(detail);
+      const error = new Error(detail) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
+    logEvent("save_success", { source });
     if (contributionMode.value === "mission") {
       savedContributions.value += 1;
       finishMission(true);
@@ -646,7 +691,12 @@ async function saveContribution() {
       contributionStatusState.value = "success";
     }
   } catch (error) {
-    const message = `Échec de l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`;
+    const reason = classifySaveFailure(error);
+    logEvent("save_failure", { source, reason });
+    const message =
+      reason === "network"
+        ? "Ta contribution n'a pas pu être envoyée. Vérifie ta connexion internet et réessaie."
+        : `Échec de l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`;
     if (contributionMode.value === "mission") {
       setGameStatus(message, "error");
     } else {
@@ -733,6 +783,7 @@ let assistantProgressTimer: ReturnType<typeof setInterval> | null = null;
 let assistantStageTimer: ReturnType<typeof setInterval> | null = null;
 let assistantLastSpeechAt: number | undefined;
 let assistantHasDetectedSpeech = false;
+let assistantRecordingStartedAt: number | null = null;
 let assistantResponseAudioUrlObject: string | null = null;
 let assistantLastInputWav: Blob | undefined;
 let assistantRawInputTranscript = "";
@@ -846,6 +897,7 @@ async function startAssistantRecording() {
     silentOutput.connect(context.destination);
     assistantCapture = { stream, context, source, processor, silentOutput, chunks, sampleRate: context.sampleRate };
     const recordingStartedAt = performance.now();
+    assistantRecordingStartedAt = recordingStartedAt;
     assistantLastSpeechAt = undefined;
     assistantHasDetectedSpeech = false;
     assistantRecording.value = true;
@@ -855,6 +907,7 @@ async function startAssistantRecording() {
     assistantMicLabel.value = "Je t'écoute…";
     assistantMicDisabled.value = false;
     assistantStatus.value = "Parle normalement. J'enverrai après 1,5 seconde de silence.";
+    logEvent("recording_start", { screen: "assistant" });
     assistantProgressTimer = setInterval(() => {
       const elapsedSeconds = Math.min(30, (performance.now() - recordingStartedAt) / 1000);
       assistantProgressValue.value = (elapsedSeconds / 30) * 100;
@@ -914,10 +967,16 @@ async function stopAssistantRecording() {
 
     const wav = encodeWav(active.chunks, sampleRate);
     assistantLastInputWav = wav;
+    const durationSeconds = assistantRecordingStartedAt
+      ? Math.round((performance.now() - assistantRecordingStartedAt) / 100) / 10
+      : null;
+    assistantRecordingStartedAt = null;
+    logEvent("recording_complete", { screen: "assistant", duration_seconds: durationSeconds });
     assistantProgressMode.value = "indeterminate";
     assistantStatus.value = "Transcription locale en cours…";
     assistantStatusState.value = "info";
 
+    logEvent("assistant_question_asked", { language: assistantLanguage.value });
     const response = await fetch(`/voice-turn?language=${encodeURIComponent(assistantLanguage.value)}`, {
       method: "POST",
       headers: { "Content-Type": "audio/wav", "X-Conversation-Id": conversationId },
@@ -956,6 +1015,7 @@ async function stopAssistantRecording() {
         assistantProgressMode.value = "complete";
         assistantProgressValue.value = 100;
         assistantResponseReady.value = true;
+        logEvent("assistant_answer_received");
         void nextTick(() => void playAssistantResponse());
         if (assistantRecordConsent.value) void silentlySaveAssistantExample();
       } else if (event.type === "error") {
@@ -1017,6 +1077,7 @@ async function silentlySaveAssistantExample() {
 }
 
 function contributeAssistantAnswer() {
+  logEvent("assistant_followup_clicked");
   activeScreen.value = "game";
   contributionMode.value = "free";
   contributionFrench.value = assistantAnswerFrench.value.trim();
@@ -1042,6 +1103,7 @@ async function handleInstallClick() {
 }
 
 onMounted(() => {
+  logEvent("app_open");
   updateClock();
   clockTimer = setInterval(updateClock, 60_000);
   const params = new URLSearchParams(window.location.search);
@@ -1055,6 +1117,10 @@ onMounted(() => {
   if (!hasOnboarded()) {
     appStage.value = "onboarding";
     onboardingSlideIndex.value = 0;
+    logEvent("onboarding_step_view", { slide_index: 0 });
+  }
+  if (isIosManualInstall && !installed.value) {
+    logEvent("ios_manual_banner_shown");
   }
 });
 
@@ -1149,7 +1215,40 @@ onBeforeUnmount(() => {
     <template v-else>
     <header>
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">F</span>
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 100 100">
+            <path
+              d="M28,26 C31,36 35,45 37,51 C35,57 31,66 28,76 L72,76 C69,66 65,57 63,51 C65,45 69,36 72,26 Z"
+              fill="#f5c451"
+              stroke="#10152f"
+              stroke-width="2.6"
+            />
+            <polyline
+              points="28,28 36,38 28,46 37,51 28,58 36,68 28,76"
+              fill="none"
+              stroke="#10152f"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              opacity="0.85"
+            />
+            <polyline
+              points="72,28 64,38 72,46 63,51 72,58 64,68 72,76"
+              fill="none"
+              stroke="#10152f"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              opacity="0.85"
+            />
+            <ellipse cx="50" cy="26" rx="22" ry="7" fill="#ffd877" stroke="#10152f" stroke-width="2.6" />
+            <ellipse cx="50" cy="76" rx="22" ry="7" fill="#e8a23a" stroke="#10152f" stroke-width="2.6" />
+            <path d="M32,17 Q22,13 19,3" fill="none" stroke="#f5c451" stroke-width="3" stroke-linecap="round" />
+            <path d="M68,17 Q78,13 81,3" fill="none" stroke="#f5c451" stroke-width="3" stroke-linecap="round" />
+            <path d="M41,15 Q38,11 36,5" fill="none" stroke="#f5c451" stroke-width="2.6" stroke-linecap="round" />
+            <path d="M59,15 Q62,11 64,5" fill="none" stroke="#f5c451" stroke-width="2.6" stroke-linecap="round" />
+          </svg>
+        </span>
         <div>
           <strong>Le carnet des voix</strong>
           <span>Bénin · une aventure en fon</span>

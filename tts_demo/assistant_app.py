@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import binascii
+import hmac
 import io
 import json
 import logging
@@ -10,7 +11,7 @@ import tempfile
 import threading
 import uuid
 import wave
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List
 
@@ -48,6 +49,31 @@ DATASET_DIR = Path(
 ).expanduser()
 MAX_TRAINING_REQUEST_BYTES = 18_000_000
 GAME_FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
+ADMIN_DASHBOARD_TOKEN = os.environ.get("ADMIN_DASHBOARD_TOKEN", "")
+ANALYTICS_LOCK = threading.Lock()
+ALLOWED_ANALYTICS_EVENTS = {
+    "app_open",
+    "onboarding_step_view",
+    "onboarding_complete",
+    "identify_complete",
+    "screen_view",
+    "mode_switch",
+    "mission_start",
+    "mission_complete",
+    "recording_start",
+    "recording_complete",
+    "self_review_checked",
+    "save_attempt",
+    "save_success",
+    "save_failure",
+    "assistant_question_asked",
+    "assistant_answer_received",
+    "assistant_followup_clicked",
+    "pwa_install_prompt_shown",
+    "pwa_install_accepted",
+    "pwa_install_dismissed",
+    "ios_manual_banner_shown",
+}
 
 
 
@@ -212,6 +238,181 @@ def persist_training_phrase(
         else None
     )
     return sample_id, encoded_synthesis
+
+
+def append_analytics_event(event_type: str, speaker_id, payload: dict) -> None:
+    DATASET_DIR.mkdir(parents=True, exist_ok=True)
+    record = {
+        "event_type": event_type,
+        "speaker_id": speaker_id,
+        "payload": payload,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    line = json.dumps(record, ensure_ascii=False)
+    with ANALYTICS_LOCK:
+        with open(DATASET_DIR / "analytics-events.jsonl", "a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+
+
+def read_analytics_events() -> List[dict]:
+    events: List[dict] = []
+    file_path = DATASET_DIR / "analytics-events.jsonl"
+    if not file_path.is_file():
+        return events
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    LOGGER.warning("Skipping a corrupt analytics event line")
+    except OSError:
+        LOGGER.exception("Could not read the analytics events file")
+    return events
+
+
+def iter_phrase_metadata():
+    phrase_dir = DATASET_DIR / "phrase-pairs"
+    if not phrase_dir.is_dir():
+        return
+    for sample_dir in phrase_dir.iterdir():
+        if not sample_dir.is_dir():
+            continue
+        metadata_file = sample_dir / "metadata.json"
+        if not metadata_file.is_file():
+            continue
+        try:
+            yield json.loads(metadata_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            LOGGER.warning("Skipping a corrupt phrase metadata file: %s", metadata_file)
+
+
+def compute_admin_stats() -> dict:
+    events = read_analytics_events()
+    phrases = list(iter_phrase_metadata())
+
+    total_duration = 0.0
+    speakers: Dict[str, dict] = {}
+    by_source: Dict[str, int] = {}
+    by_review_status: Dict[str, int] = {}
+
+    today = datetime.now(timezone.utc).date()
+    daily_counts: Dict[str, Dict[str, float]] = {
+        (today - timedelta(days=offset)).isoformat(): {"recordings": 0, "duration_seconds": 0.0}
+        for offset in range(29, -1, -1)
+    }
+
+    for phrase in phrases:
+        if not isinstance(phrase, dict):
+            continue
+        source = phrase.get("contribution_source") or "unknown"
+        by_source[source] = by_source.get(source, 0) + 1
+        status = phrase.get("review_status") or "unknown"
+        by_review_status[status] = by_review_status.get(status, 0) + 1
+        duration = phrase.get("human_audio_duration_seconds") or 0.0
+        if not isinstance(duration, (int, float)):
+            duration = 0.0
+        total_duration += duration
+
+        created_at = phrase.get("created_at")
+        if isinstance(created_at, str):
+            try:
+                day_key = datetime.fromisoformat(created_at).date().isoformat()
+                if day_key in daily_counts:
+                    daily_counts[day_key]["recordings"] += 1
+                    daily_counts[day_key]["duration_seconds"] += duration
+            except ValueError:
+                pass
+
+        speaker_id = phrase.get("speaker_id")
+        if isinstance(speaker_id, str) and speaker_id:
+            entry = speakers.setdefault(
+                speaker_id,
+                {
+                    "speaker_id": speaker_id,
+                    "speaker_label": phrase.get("speaker_label"),
+                    "contributions": 0,
+                    "total_duration_seconds": 0.0,
+                },
+            )
+            entry["contributions"] += 1
+            entry["total_duration_seconds"] += duration
+
+    top_speakers = sorted(
+        speakers.values(), key=lambda item: item["contributions"], reverse=True
+    )[:20]
+    for entry in top_speakers:
+        entry["total_duration_seconds"] = round(entry["total_duration_seconds"], 1)
+
+    funnel = {
+        "onboarding_complete": 0,
+        "identify_complete": 0,
+        "first_recording": 0,
+        "save_success": 0,
+    }
+    save_failures = {"network": 0, "server_error": 0, "validation": 0}
+    pwa_stats = {"prompt_shown": 0, "accepted": 0, "ios_banner_shown": 0}
+    first_recording_speakers = set()
+
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_type = event.get("event_type")
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        if event_type == "onboarding_complete":
+            funnel["onboarding_complete"] += 1
+        elif event_type == "identify_complete":
+            funnel["identify_complete"] += 1
+        elif event_type == "recording_complete":
+            speaker_id = event.get("speaker_id")
+            if isinstance(speaker_id, str) and speaker_id and speaker_id not in first_recording_speakers:
+                first_recording_speakers.add(speaker_id)
+                funnel["first_recording"] += 1
+        elif event_type == "save_success":
+            funnel["save_success"] += 1
+        elif event_type == "save_failure":
+            reason = payload.get("reason")
+            if reason in save_failures:
+                save_failures[reason] += 1
+        elif event_type == "pwa_install_prompt_shown":
+            pwa_stats["prompt_shown"] += 1
+        elif event_type == "pwa_install_accepted":
+            pwa_stats["accepted"] += 1
+        elif event_type == "ios_manual_banner_shown":
+            pwa_stats["ios_banner_shown"] += 1
+
+    recent_events = sorted(
+        (event for event in events if isinstance(event, dict)),
+        key=lambda event: event.get("created_at") or "",
+        reverse=True,
+    )[:50]
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "totals": {
+            "recordings": len(phrases),
+            "total_duration_seconds": round(total_duration, 1),
+            "unique_speakers": len(speakers),
+        },
+        "by_source": by_source,
+        "by_review_status": by_review_status,
+        "daily": [
+            {
+                "date": day,
+                "recordings": data["recordings"],
+                "duration_seconds": round(data["duration_seconds"], 1),
+            }
+            for day, data in sorted(daily_counts.items())
+        ],
+        "funnel": funnel,
+        "save_failures": save_failures,
+        "pwa": pwa_stats,
+        "top_speakers": top_speakers,
+        "recent_events": recent_events,
+    }
 
 
 FONT_HEAD_TAGS = """
@@ -1126,6 +1327,47 @@ async def save_training_phrase_request(request: Request):
             detail="Impossible d'enregistrer la contribution sur cet ordinateur.",
         ) from error
     return {"sample_id": sample_id, "synthesized_audio": audio}
+
+
+@web_app.post("/analytics/event")
+async def analytics_event_request(request: Request):
+    request_data = await request.body()
+    if len(request_data) > 20_000:
+        raise HTTPException(status_code=400, detail="Évènement trop volumineux.")
+    try:
+        payload = json.loads(request_data)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=400, detail="Évènement invalide.") from error
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Évènement invalide.")
+    event_type = payload.get("event_type")
+    if not isinstance(event_type, str) or event_type not in ALLOWED_ANALYTICS_EVENTS:
+        raise HTTPException(status_code=400, detail="Type d'évènement invalide.")
+    speaker_id = sanitize_speaker_field(payload.get("speaker_id"))
+    event_payload = payload.get("payload")
+    if not isinstance(event_payload, dict):
+        event_payload = {}
+    try:
+        await run_in_threadpool(append_analytics_event, event_type, speaker_id, event_payload)
+    except Exception:
+        LOGGER.exception("Could not persist an analytics event")
+        return {"ok": False}
+    return {"ok": True}
+
+
+@web_app.get("/admin/api/stats")
+async def admin_stats_request(request: Request):
+    provided_token = request.headers.get("X-Admin-Token") or request.query_params.get("token", "")
+    if not ADMIN_DASHBOARD_TOKEN or not hmac.compare_digest(provided_token, ADMIN_DASHBOARD_TOKEN):
+        raise HTTPException(status_code=403, detail="Accès refusé.")
+    try:
+        return await run_in_threadpool(compute_admin_stats)
+    except Exception as error:
+        LOGGER.exception("Could not compute admin stats")
+        raise HTTPException(
+            status_code=500,
+            detail="Impossible de calculer les statistiques.",
+        ) from error
 
 
 if GAME_FRONTEND_DIST.is_dir():

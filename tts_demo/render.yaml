@@ -16,3 +16,5 @@ services:
         value: openrouter/auto
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: ADMIN_DASHBOARD_TOKEN
+        sync: false
