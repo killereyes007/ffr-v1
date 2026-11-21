@@ -2175,6 +2175,10 @@ audio {
     box-shadow: none;
   }
 
+  .phone-status {
+    display: none;
+  }
+
   header {
     min-height: 60px;
   }
