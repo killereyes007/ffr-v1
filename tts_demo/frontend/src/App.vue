@@ -11,19 +11,6 @@ import {
 } from "./identity";
 import { logEvent } from "./analytics";
 
-interface Choice {
-  text: string;
-  outcome: string;
-}
-
-interface Mission {
-  id: string;
-  kicker: string;
-  title: string;
-  story: string;
-  choices: Choice[];
-}
-
 interface HistorySource {
   label: string;
   url: string;
@@ -46,93 +33,136 @@ interface AudioCapture {
   sampleRate: number;
 }
 
-const missions: Mission[] = [
-  {
-    id: "voix-quotidiennes",
-    kicker: "Une radio d'aujourd'hui",
-    title: "Ouvrir l'antenne",
-    story:
-      "Mina prépare une émission de proximité. Elle cherche une formule d'accueil que des locuteurs pourront proposer en fon, avec leurs propres mots.",
-    choices: [
-      {
-        text: "Bonjour, merci d'être à l'écoute ce matin.",
-        outcome: "L'émission commence par un accueil simple.",
-      },
-      {
-        text: "Bienvenue à notre émission de quartier.",
-        outcome: "Mina ouvre le micro à ses auditeurs.",
-      },
-      {
-        text: "Prenons quelques minutes pour échanger.",
-        outcome: "L'antenne invite à la conversation.",
-      },
-    ],
-  },
-  {
-    id: "informations-utiles",
-    kicker: "Un message utile",
-    title: "Faire circuler l'information",
-    story:
-      "La radio veut partager des informations pratiques du quotidien. Choisis une annonce claire ; une traduction en fon reste une proposition de son auteur, pas une réponse attendue.",
-    choices: [
-      {
-        text: "Le marché ouvre plus tard aujourd'hui.",
-        outcome: "Les auditeurs reçoivent une information pratique.",
-      },
-      {
-        text: "La réunion commence à quinze heures.",
-        outcome: "L'horaire de la rencontre est annoncé.",
-      },
-      {
-        text: "Pour un renseignement, adressez-vous à l'accueil.",
-        outcome: "Les auditeurs savent où poser leurs questions.",
-      },
-    ],
-  },
-  {
-    id: "paroles-partagees",
-    kicker: "Les voix se répondent",
-    title: "Donner rendez-vous",
-    story:
-      "Pour terminer, Mina prépare une invitation à la prochaine émission. Le fon est une langue vivante, et les mots comme leurs usages peuvent varier selon les locuteurs.",
-    choices: [
-      {
-        text: "Retrouvons-nous la semaine prochaine à la radio.",
-        outcome: "L'émission donne rendez-vous aux auditeurs.",
-      },
-      {
-        text: "Vous pouvez nous proposer un sujet.",
-        outcome: "La radio invite le public à suggérer un thème.",
-      },
-      {
-        text: "Merci d'avoir partagé ce moment avec nous.",
-        outcome: "Mina remercie les personnes à l'écoute.",
-      },
-    ],
-  },
-];
+interface DomainItem {
+  text: string;
+  kind: "mot" | "phrase" | "paragraphe";
+}
 
-const routeStops = [
+interface DomainStory {
+  kicker: string;
+  title: string;
+  body: string;
+}
+
+interface Domain {
+  id: string;
+  label: string;
+  icon: string;
+  mode: "histoire" | "phrases";
+  story?: DomainStory;
+  items: DomainItem[];
+}
+
+const domains: Domain[] = [
   {
-    city: "Cotonou",
-    x: 16,
-    y: 70,
-    title: "Le studio de quartier",
-    detail: "Afi rejoint Mina pour préparer l'ouverture de l'antenne.",
+    id: "sante",
+    label: "Santé",
+    icon: "✚",
+    mode: "histoire",
+    story: {
+      kicker: "Un centre de santé de quartier",
+      title: "Au centre de santé du quartier",
+      body:
+        "L'agent de santé reçoit les habitants du quartier dès le matin. Aujourd'hui, une mère est venue avec son enfant qui tousse depuis plusieurs jours.",
+    },
+    items: [
+      { text: "Bonjour, qu'est-ce qui vous amène aujourd'hui ?", kind: "phrase" },
+      { text: "Avez-vous de la fièvre depuis combien de jours ?", kind: "phrase" },
+      { text: "Buvez beaucoup d'eau et reposez-vous.", kind: "phrase" },
+      { text: "N'oubliez pas de revenir si ça ne va pas mieux.", kind: "phrase" },
+    ],
   },
   {
-    city: "Porto-Novo",
-    x: 50,
-    y: 27,
-    title: "Le point d'information",
-    detail: "Une halte pour préparer un message pratique à partager.",
+    id: "education",
+    label: "Éducation",
+    icon: "✎",
+    mode: "histoire",
+    story: {
+      kicker: "Une salle de classe de village",
+      title: "La rentrée à l'école du village",
+      body:
+        "C'est le premier jour de classe après les vacances. L'instituteur accueille les élèves devant l'école, certains reviennent de loin pour cette rentrée.",
+    },
+    items: [
+      { text: "Ouvrez vos cahiers à la page dix.", kind: "phrase" },
+      { text: "Qui peut me dire la capitale du Bénin ?", kind: "phrase" },
+      { text: "Le travail que tu as fait est très bien.", kind: "phrase" },
+      { text: "N'oublie pas d'apporter ton livre demain.", kind: "phrase" },
+    ],
   },
   {
-    city: "Abomey",
-    x: 84,
-    y: 70,
-    title: "Le rendez-vous radio",
-    detail: "Dernière étape : inviter les auditeurs à la prochaine émission.",
+    id: "religion_traditions",
+    label: "Religion & traditions",
+    icon: "◆",
+    mode: "histoire",
+    story: {
+      kicker: "Une cérémonie saisonnière",
+      title: "La cérémonie du village",
+      body:
+        "Une fois par saison, les familles du village se réunissent autour des anciens pour une cérémonie transmise depuis des générations.",
+    },
+    items: [
+      { text: "Les anciens nous ont transmis cette histoire.", kind: "phrase" },
+      { text: "Chaque saison, le village se réunit ici.", kind: "phrase" },
+      { text: "Respecte la terre de tes ancêtres.", kind: "phrase" },
+      { text: "Cette fête rassemble toute la famille.", kind: "phrase" },
+    ],
+  },
+  {
+    id: "agriculture",
+    label: "Agriculture",
+    icon: "✦",
+    mode: "phrases",
+    items: [
+      { text: "la récolte", kind: "mot" },
+      { text: "Il va pleuvoir, il faut rentrer les régimes de maïs.", kind: "phrase" },
+      { text: "Le champ de mon père est derrière la rivière.", kind: "phrase" },
+      {
+        text:
+          "Chaque matin, je vais au champ avant qu'il fasse trop chaud. Je m'occupe des plants et j'arrose quand la terre est sèche.",
+        kind: "paragraphe",
+      },
+    ],
+  },
+  {
+    id: "commerce_marche",
+    label: "Commerce & marché",
+    icon: "⚖",
+    mode: "phrases",
+    items: [
+      { text: "le prix", kind: "mot" },
+      { text: "Combien coûte ce tissu ?", kind: "phrase" },
+      { text: "C'est trop cher, peux-tu baisser un peu ?", kind: "phrase" },
+      { text: "Je reviendrai demain acheter plus.", kind: "phrase" },
+    ],
+  },
+  {
+    id: "administration",
+    label: "Administration & vie quotidienne",
+    icon: "▤",
+    mode: "phrases",
+    items: [
+      { text: "la carte d'identité", kind: "mot" },
+      { text: "Où se trouve le bureau du quartier ?", kind: "phrase" },
+      { text: "J'ai besoin d'un certificat de naissance.", kind: "phrase" },
+      { text: "Le marché ferme à quelle heure aujourd'hui ?", kind: "phrase" },
+    ],
+  },
+  {
+    id: "metiers_travail",
+    label: "Métiers & travail",
+    icon: "⚒",
+    mode: "phrases",
+    items: [
+      { text: "le mécanicien", kind: "mot" },
+      { text: "Je cherche du travail pour la saison sèche.", kind: "phrase" },
+      { text: "Mon oncle est menuisier depuis vingt ans.", kind: "phrase" },
+      {
+        text:
+          "Mon frère répare les motos au bord de la route. Beaucoup de gens viennent le voir quand leur moto tombe en panne.",
+        kind: "paragraphe",
+      },
+    ],
   },
 ];
 
@@ -223,9 +253,15 @@ const historyNotes: HistoryNote[] = [
   },
 ];
 
-const missionNumber = ref(0);
 const activeScreen = ref<"home" | "game" | "assistant">("game");
-const contributionMode = ref<"mission" | "free">("mission");
+const contributionMode = ref<"domain" | "free">("domain");
+const selectedDomainId = ref<string | null>(null);
+const selectedDomain = computed(
+  () => domains.find((domain) => domain.id === selectedDomainId.value) ?? null,
+);
+const selectedItem = ref<DomainItem | null>(null);
+const domainStoryAcknowledged = ref(false);
+const itemFinished = ref(false);
 
 interface OnboardingSlide {
   title: string;
@@ -288,9 +324,6 @@ function confirmIdentity() {
   logEvent("identify_complete", { speaker_label: speakerLabelInput.value });
   appStage.value = "ready";
 }
-const routeStop = computed(
-  () => routeStops[Math.min(missionNumber.value, routeStops.length - 1)],
-);
 const historyOpen = ref(false);
 
 const currentScreenName = computed<string | null>(() => {
@@ -306,15 +339,10 @@ watch(
   },
   { immediate: true },
 );
-const selectedChoice = ref<Choice | null>(null);
 const gameStatus = ref("");
 const gameStatusType = ref<"info" | "error" | "success">("info");
-const missionFinished = ref(false);
 const savedContributions = ref(0);
 const clock = ref("");
-const mission = computed(() => missions[missionNumber.value]);
-const isComplete = computed(() => missionNumber.value >= missions.length);
-const episodesPrepared = computed(() => missionNumber.value);
 
 // --- Contribution zone shared by "Phrase proposée" (mission) and "Ma phrase" (free) modes ---
 
@@ -356,10 +384,22 @@ function updateClock() {
   }).format(new Date());
 }
 
+function openDomainSelector() {
+  activeScreen.value = "game";
+  contributionMode.value = "domain";
+  selectedDomainId.value = null;
+  selectedItem.value = null;
+  domainStoryAcknowledged.value = false;
+  itemFinished.value = false;
+  setGameStatus("");
+  void nextTick(() => {
+    document.querySelector(".shell main")?.scrollTo({ top: 0 });
+  });
+}
+
 function openHistoryNotebook() {
   activeScreen.value = "game";
-  contributionMode.value = "mission";
-  if (isComplete.value) restartChapter();
+  contributionMode.value = "domain";
   historyOpen.value = true;
   void nextTick(() => {
     document.querySelector("#history-notebook")?.scrollIntoView({
@@ -369,23 +409,8 @@ function openHistoryNotebook() {
   });
 }
 
-function scrollToMission() {
-  activeScreen.value = "game";
-  void nextTick(() => {
-    document.querySelector("#mission")?.scrollIntoView({ behavior: "smooth" });
-  });
-}
-
 function scrollToContribution() {
-  activeScreen.value = "game";
-  if (contributionMode.value === "mission" && !selectedChoice.value) {
-    setGameStatus("Choisis d'abord une réplique pour contribuer.");
-    scrollToMission();
-    return;
-  }
-  void nextTick(() => {
-    document.querySelector("#contribution")?.scrollIntoView({ behavior: "smooth" });
-  });
+  openDomainSelector();
 }
 
 function showHome() {
@@ -397,11 +422,7 @@ function showHome() {
 }
 
 function startChapter() {
-  activeScreen.value = "game";
-  contributionMode.value = "mission";
-  void nextTick(() => {
-    document.querySelector(".shell main")?.scrollTo({ top: 0 });
-  });
+  openDomainSelector();
 }
 
 function setGameStatus(message: string, type: "info" | "error" | "success" = "info") {
@@ -595,40 +616,71 @@ async function startContributionRecording() {
   }
 }
 
-function setContributionMode(mode: "mission" | "free") {
+function setContributionMode(mode: "domain" | "free") {
   if (contributionMode.value === mode) return;
   contributionMode.value = mode;
   contributionFon.value = "";
   clearContributionRecording();
   contributionStatus.value = "";
   contributionSaved.value = false;
-  contributionFrench.value = mode === "mission" ? selectedChoice.value?.text ?? "" : "";
+  if (mode === "free") {
+    contributionFrench.value = "";
+    selectedDomainId.value = null;
+    selectedItem.value = null;
+  } else {
+    contributionFrench.value = selectedItem.value?.text ?? "";
+  }
   logEvent("mode_switch", { mode });
 }
 
-function chooseReply(choice: Choice) {
-  selectedChoice.value = choice;
-  missionFinished.value = false;
-  contributionFrench.value = choice.text;
+function chooseFreeDomain() {
+  setContributionMode("free");
+  logEvent("domain_selected", { domain_id: "libre" });
+  void nextTick(() => {
+    document.querySelector("#contribution")?.scrollIntoView({ behavior: "smooth" });
+  });
+}
+
+function selectDomainCard(domain: Domain) {
+  contributionMode.value = "domain";
+  selectedDomainId.value = domain.id;
+  selectedItem.value = null;
+  itemFinished.value = false;
+  domainStoryAcknowledged.value = domain.mode !== "histoire";
+  contributionFrench.value = "";
+  contributionFon.value = "";
+  clearContributionRecording();
+  setGameStatus("");
+  logEvent("domain_selected", { domain_id: domain.id });
+}
+
+function acknowledgeDomainStory() {
+  domainStoryAcknowledged.value = true;
+}
+
+function chooseDomainItem(domain: Domain, item: DomainItem, index: number) {
+  selectedItem.value = item;
+  itemFinished.value = false;
+  contributionFrench.value = item.text;
   contributionFon.value = "";
   clearContributionRecording();
   setGameStatus(
-    "Réplique choisie. Tu peux la traduire et l'enregistrer, ou poursuivre sans contribuer.",
+    "Phrase choisie. Tu peux la traduire et l'enregistrer, ou revenir en arrière.",
   );
-  logEvent("mission_start", { mission_id: mission.value?.id });
+  logEvent("domain_item_chosen", { domain_id: domain.id, item_index: index });
 }
 
-function finishMission(contributed: boolean) {
-  const currentMission = mission.value;
-  if (!currentMission || !selectedChoice.value) return;
-  missionFinished.value = true;
+function finishDomainItem(contributed: boolean) {
+  const domain = selectedDomain.value;
+  if (!domain || !selectedItem.value) return;
+  itemFinished.value = true;
   setGameStatus(
     contributed
-      ? `Contribution reçue pour « ${currentMission.title} » ; elle reste à vérifier.`
-      : `Mission accomplie : ${selectedChoice.value.outcome} Aucun texte ni audio n'a été enregistré.`,
+      ? `Contribution reçue pour « ${domain.label} » ; elle reste à vérifier.`
+      : "Passé sans contribuer. Aucun texte ni audio n'a été enregistré.",
     contributed ? "success" : "info",
   );
-  logEvent("mission_complete", { mission_id: currentMission.id, contributed });
+  logEvent("domain_item_complete", { domain_id: domain.id, contributed });
 }
 
 function classifySaveFailure(error: unknown): "network" | "server_error" | "validation" {
@@ -640,16 +692,18 @@ function classifySaveFailure(error: unknown): "network" | "server_error" | "vali
 
 async function saveContribution() {
   if (!canSaveContribution.value) return;
-  if (contributionMode.value === "mission" && (!selectedChoice.value || !mission.value)) return;
+  if (contributionMode.value === "domain" && (!selectedItem.value || !selectedDomain.value)) return;
   contributionSaving.value = true;
-  const source = contributionMode.value === "mission" ? "game_mission" : "free_collecte";
-  if (contributionMode.value === "mission") {
+  const domainId = contributionMode.value === "domain" ? selectedDomain.value?.id ?? "inconnu" : "libre";
+  const contentMode = contributionMode.value === "domain" ? selectedDomain.value?.mode ?? "phrases" : "libre";
+  const source = domainId;
+  if (contributionMode.value === "domain") {
     setGameStatus("Envoi de la contribution au serveur du prototype…");
   } else {
     contributionStatus.value = "Envoi de la contribution au serveur du prototype…";
     contributionStatusState.value = "info";
   }
-  logEvent("save_attempt", { source });
+  logEvent("save_attempt", { source, domain: domainId });
   try {
     const identity = getSpeakerIdentity();
     const response = await fetch("/training-phrases", {
@@ -658,8 +712,10 @@ async function saveContribution() {
       body: JSON.stringify({
         consent: true,
         source,
-        mission_id: contributionMode.value === "mission" ? mission.value?.id ?? null : null,
-        mission_title: contributionMode.value === "mission" ? mission.value?.title ?? null : null,
+        domain: domainId,
+        content_mode: contentMode,
+        mission_id: contributionMode.value === "domain" ? selectedDomain.value?.id ?? null : null,
+        mission_title: contributionMode.value === "domain" ? selectedDomain.value?.label ?? null : null,
         french_text: contributionFrench.value.trim(),
         fon_text: contributionFon.value.trim(),
         human_audio: contributionHumanAudio.value,
@@ -679,10 +735,10 @@ async function saveContribution() {
       error.status = response.status;
       throw error;
     }
-    logEvent("save_success", { source });
-    if (contributionMode.value === "mission") {
+    logEvent("save_success", { source, domain: domainId });
+    if (contributionMode.value === "domain") {
       savedContributions.value += 1;
-      finishMission(true);
+      finishDomainItem(true);
     } else {
       contributionSaved.value = true;
       contributionStatus.value = "Contribution enregistrée. Merci !";
@@ -695,7 +751,7 @@ async function saveContribution() {
       reason === "network"
         ? "Ta contribution n'a pas pu être envoyée. Vérifie ta connexion internet et réessaie."
         : `Échec de l'enregistrement : ${error instanceof Error ? error.message : "erreur inconnue"}`;
-    if (contributionMode.value === "mission") {
+    if (contributionMode.value === "domain") {
       setGameStatus(message, "error");
     } else {
       contributionStatus.value = message;
@@ -704,32 +760,6 @@ async function saveContribution() {
   } finally {
     contributionSaving.value = false;
   }
-}
-
-function nextMission() {
-  if (missionNumber.value >= missions.length - 1) {
-    missionNumber.value = missions.length;
-    return;
-  }
-  missionNumber.value += 1;
-  selectedChoice.value = null;
-  missionFinished.value = false;
-  contributionFrench.value = "";
-  contributionFon.value = "";
-  clearContributionRecording();
-  setGameStatus("");
-  contributionRecordStatus.value = "Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.";
-}
-
-function restartChapter() {
-  missionNumber.value = 0;
-  selectedChoice.value = null;
-  missionFinished.value = false;
-  contributionFrench.value = "";
-  contributionFon.value = "";
-  clearContributionRecording();
-  setGameStatus("");
-  contributionRecordStatus.value = "Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.";
 }
 
 // --- Assistant screen (voice conversation: mic -> ASR -> LLM -> traduction -> TTS) ---
@@ -1339,100 +1369,31 @@ onBeforeUnmount(() => {
     </main>
 
     <main v-else-if="activeScreen === 'game'">
-      <div class="contribution-mode-toggle" role="tablist" aria-label="Façon de contribuer">
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="contributionMode === 'mission'"
-          :class="{ 'is-active': contributionMode === 'mission' }"
-          @click="setContributionMode('mission')"
-        >
-          Phrase proposée
-        </button>
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="contributionMode === 'free'"
-          :class="{ 'is-active': contributionMode === 'free' }"
-          @click="setContributionMode('free')"
-        >
-          Ma phrase
-        </button>
-      </div>
+      <button
+        v-if="contributionMode === 'free'"
+        class="history-toggle"
+        type="button"
+        @click="openDomainSelector"
+      >
+        <span aria-hidden="true">←</span> Retour aux domaines
+      </button>
 
-      <template v-if="contributionMode === 'mission'">
-      <section v-if="!isComplete" class="chapter-intro">
+      <template v-if="contributionMode === 'domain'">
+      <section v-if="!selectedDomain" class="chapter-intro">
         <div class="chapter-title-row">
           <div>
-            <span class="eyebrow">Chronique interactive · Chapitre 1</span>
+            <span class="eyebrow">Ma voix · choisis un domaine</span>
             <h1>Le carnet des voix</h1>
           </div>
-          <div class="signal-count" :aria-label="`${episodesPrepared} épisodes préparés sur trois`">
+          <div class="signal-count" :aria-label="`${savedContributions} contributions enregistrées`">
             <span aria-hidden="true">♫</span>
-            <strong>{{ episodesPrepared }}/3</strong>
+            <strong>{{ savedContributions }}</strong>
           </div>
         </div>
         <p class="intro">
-          Afi traverse trois villes pour aider une radio de proximité à faire
-          circuler les voix du quotidien.
+          Chaque domaine propose des mots et des phrases du quotidien à traduire en fon, avec
+          ou sans histoire pour les présenter — ou propose librement ta propre phrase.
         </p>
-        <section class="route-card" aria-label="Itinéraire fictif d'Afi">
-          <div class="route-heading">
-            <div>
-              <span class="eyebrow">Le carnet de route d'Afi</span>
-              <h2>{{ routeStop.city }}</h2>
-            </div>
-            <span class="route-step">Étape {{ Math.min(missionNumber + 1, routeStops.length) }}/{{ routeStops.length }}</span>
-          </div>
-          <p class="route-location">{{ routeStop.title }} · {{ routeStop.detail }}</p>
-          <div class="route-map" role="img" :aria-label="`Afi est à ${routeStop.city}. Itinéraire fictif de Cotonou à Abomey.`">
-            <svg class="route-road" viewBox="0 0 360 138" preserveAspectRatio="none" aria-hidden="true">
-              <path class="route-road-shadow" d="M58 101 C105 101 111 42 180 38 S258 49 302 101" />
-              <path class="route-road-line" d="M58 101 C105 101 111 42 180 38 S258 49 302 101" />
-            </svg>
-            <span
-              v-for="(stop, index) in routeStops"
-              :key="stop.city"
-              class="route-stop"
-              :class="{
-                'is-visited': index < missionNumber,
-                'is-current': index === Math.min(missionNumber, routeStops.length - 1),
-              }"
-              :style="{ left: `${stop.x}%`, top: `${stop.y}%` }"
-            >
-              <span class="route-stop-dot">{{ index < missionNumber ? "✓" : String(index + 1).padStart(2, "0") }}</span>
-              <span class="route-stop-name">{{ stop.city }}</span>
-            </span>
-            <span
-              class="route-player"
-              :style="{ left: `${routeStop.x}%`, top: `${routeStop.y}%` }"
-              aria-label="Afi, personnage fictif en déplacement"
-            >
-              <svg viewBox="0 0 32 40" aria-hidden="true">
-                <circle cx="16" cy="7" r="5" />
-                <path d="M10 15 Q16 11 22 15 L24 25 L20 26 L22 38 L17 38 L15 28 L12 38 L7 38 L11 25 L8 24Z" />
-                <path class="route-player-arm" d="M10 17 L5 24 M21 17 L27 21" />
-              </svg>
-              <span>Afi</span>
-            </span>
-          </div>
-          <p class="route-note">Parcours de fiction, pas une carte routière. Les lieux et rencontres sont imaginaires ; ils ne représentent pas toutes les langues ni les réalités de ces villes.</p>
-        </section>
-        <div class="mission-track" aria-label="Progression des missions">
-          <span
-            v-for="(chapterMission, index) in missions"
-            :key="chapterMission.id"
-            class="track-node"
-            :class="{
-              'is-complete': index < missionNumber,
-              'is-current': index === missionNumber,
-            }"
-            :aria-label="`${chapterMission.title}${index < missionNumber ? ', terminée' : index === missionNumber ? ', en cours' : ', à venir'}`"
-          >
-            <span>{{ index < missionNumber ? "✓" : String(index + 1).padStart(2, "0") }}</span>
-            <span class="track-line" aria-hidden="true"></span>
-          </span>
-        </div>
         <button
           class="history-toggle"
           type="button"
@@ -1477,125 +1438,36 @@ onBeforeUnmount(() => {
             concernées.
           </p>
         </section>
+        <div class="domain-grid" role="list" aria-label="Domaines à explorer">
+          <button
+            v-for="domain in domains"
+            :key="domain.id"
+            class="domain-card"
+            type="button"
+            role="listitem"
+            @click="selectDomainCard(domain)"
+          >
+            <span class="domain-card-icon" aria-hidden="true">{{ domain.icon }}</span>
+            <span class="domain-card-label">{{ domain.label }}</span>
+            <span class="domain-card-mode">{{ domain.mode === "histoire" ? "Avec une histoire" : "Mots et phrases" }}</span>
+          </button>
+          <button class="domain-card domain-card-free" type="button" role="listitem" @click="chooseFreeDomain">
+            <span class="domain-card-icon" aria-hidden="true">✍</span>
+            <span class="domain-card-label">Autre / phrase libre</span>
+            <span class="domain-card-mode">Propose ta propre phrase</span>
+          </button>
+        </div>
       </section>
 
-      <section v-if="!isComplete && mission" id="mission" class="game-screen" aria-live="polite">
-        <div class="radio-scene" :class="`scene-${missionNumber + 1}`">
-          <svg
-            class="scene-illustration"
-            viewBox="0 0 560 320"
-            preserveAspectRatio="xMidYMid slice"
-            role="img"
-            :aria-label="`Illustration fictive d'une rue à ${routeStop.city}, avec Afi devant un studio radio de quartier.`"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <defs>
-              <linearGradient id="city-sky" x2="0" y2="1">
-                <stop offset="0" stop-color="#6e6c89" />
-                <stop offset=".48" stop-color="#e9a47f" />
-                <stop offset="1" stop-color="#f4c27e" />
-              </linearGradient>
-              <linearGradient id="city-wall" x2=".8" y2="1">
-                <stop stop-color="#e9c398" />
-                <stop offset="1" stop-color="#ad785e" />
-              </linearGradient>
-              <linearGradient id="afi-skin" x2=".9" y2="1">
-                <stop stop-color="#75452f" />
-                <stop offset=".5" stop-color="#573323" />
-                <stop offset="1" stop-color="#38251f" />
-              </linearGradient>
-              <linearGradient id="afi-shirt" x2="1" y2="1">
-                <stop stop-color="#2c7680" />
-                <stop offset="1" stop-color="#174958" />
-              </linearGradient>
-              <linearGradient id="street" x2="0" y2="1">
-                <stop stop-color="#68606a" />
-                <stop offset="1" stop-color="#343644" />
-              </linearGradient>
-              <pattern id="wall-grain" width="18" height="18" patternUnits="userSpaceOnUse">
-                <path d="M2 5h4M11 14h3" stroke="#fff4dd" stroke-opacity=".1" stroke-width="1" />
-              </pattern>
-              <filter id="soft-shadow" x="-30%" y="-30%" width="160%" height="180%">
-                <feGaussianBlur in="SourceAlpha" stdDeviation="4" />
-                <feOffset dy="4" />
-                <feComponentTransfer><feFuncA type="linear" slope=".28" /></feComponentTransfer>
-                <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-            </defs>
-            <rect width="560" height="320" fill="url(#city-sky)" />
-            <circle cx="428" cy="72" r="31" fill="#ffe2a5" opacity=".8" />
-            <path d="M0 148 72 127 129 143 193 111 250 137 312 116 375 140 446 112 560 143v73H0Z" fill="#64677a" opacity=".56" />
-            <path d="M0 161h104V88H0Zm112-27h72V69h-72Zm80 25h75V104h-75Zm190-15h58V92h-58Zm65 12h113V73H447Z" fill="#4a5266" opacity=".7" />
-            <path d="M0 190h560v130H0Z" fill="url(#street)" />
-            <path d="M0 190h560v20H0Z" fill="#e1bd91" />
-            <path d="M0 208h560" stroke="#fff0d6" stroke-opacity=".3" stroke-width="2" />
-            <path d="m337 320 61-112h32l-31 112Z" fill="#252a38" opacity=".38" />
-            <path d="M0 276q102-28 195 0t194 0q83-24 171-1v45H0Z" fill="#272b36" opacity=".58" />
-            <path d="M45 178V64h221v114Z" fill="url(#city-wall)" />
-            <path d="M45 178V64h221v114Z" fill="url(#wall-grain)" />
-            <path d="M37 67h236v12H37z" fill="#785949" />
-            <path d="M37 178h236v12H37z" fill="#80614d" />
-            <rect x="61" y="96" width="77" height="58" rx="3" fill="#315266" />
-            <rect x="68" y="103" width="63" height="44" fill="#f3cb8b" />
-            <path d="M99 103v44M68 125h63" stroke="#315266" stroke-width="4" />
-            <rect x="157" y="101" width="62" height="46" rx="3" fill="#26394e" />
-            <rect x="162" y="106" width="52" height="36" fill="#f8d59b" opacity=".8" />
-            <path d="M158 101h61v8h-61z" fill="#59616d" />
-            <rect x="227" y="121" width="8" height="57" fill="#f0c47f" opacity=".75" />
-            <rect x="53" y="78" width="118" height="24" rx="5" fill="#20354b" />
-            <text x="66" y="95" fill="#ffe0a0" font-size="12" font-weight="800" letter-spacing="2">FON FM</text>
-            <path d="M286 190V87h4v103M288 90l-21 25m22-27 21 24m-40 1h38" fill="none" stroke="#354557" stroke-linecap="round" stroke-width="3" />
-            <path d="M289 83q18-20 0-38m0 38q-18-20 0-38m0 47q30-31 0-62m0 62q-30-31 0-62" fill="none" stroke="#f8d99a" stroke-opacity=".62" stroke-width="2" />
-            <path d="M0 218h560" stroke="#f4ce98" stroke-opacity=".5" stroke-width="3" />
-            <path d="M21 221h110m282 0h105" stroke="#fff1d2" stroke-opacity=".28" stroke-width="2" stroke-dasharray="3 11" />
-            <g opacity=".78">
-              <path d="M451 191v-53m0 16q-26-18-27-40 27 3 35 27m-8 12q21-19 39-16-5 25-39 33" fill="#354a43" />
-              <path d="M451 181v-42" stroke="#604b3d" stroke-width="5" />
-            </g>
-            <ellipse cx="371" cy="287" rx="66" ry="12" fill="#111a28" opacity=".4" />
-            <g class="city-extra-person" transform="translate(95 179)">
-              <path d="M5 53q3-24 24-27 22 3 26 27v33H5Z" fill="#d58c43" />
-              <path d="M14 30q-2-24 15-27 18 2 17 26l-7 11H19Z" fill="#261d1e" />
-              <ellipse cx="30" cy="19" rx="13" ry="16" fill="#68412f" />
-              <path d="M17 16q1-17 14-16 13 1 14 15-8-7-15-6-5 5-13 7" fill="#251e20" />
-              <path d="M25 35h10v13H25z" fill="#62402d" />
-              <path d="m17 43 12 7 12-7" fill="none" stroke="#efc7a2" stroke-width="2" />
-            </g>
-            <g class="afi-figure" filter="url(#soft-shadow)">
-              <path d="M327 303q3-57 22-83 12-14 40-17 32 5 46 22 14 24 18 78Z" fill="url(#afi-shirt)" />
-              <path d="M355 212q11-12 21-12l13 17 14-17q11 1 22 12l-12 15-8-5v80h-43v-80l-8 6Z" fill="#f0b84c" />
-              <path d="m376 217 13 16 13-16v83h-26Z" fill="url(#afi-shirt)" />
-              <path d="M359 298h59v6h-59z" fill="#e8b65f" opacity=".8" />
-              <path d="M365 167h31v48h-31z" fill="url(#afi-skin)" />
-              <ellipse cx="380" cy="143" rx="39" ry="48" fill="url(#afi-skin)" />
-              <path d="M340 145q-12-52 29-65 41-9 58 24 7 16 1 42-7-23-23-31-22 8-53-5l-9 38Z" fill="#241d20" />
-              <path d="M344 127q7-36 37-41m7-1q17 3 27 17" fill="none" stroke="#38292a" stroke-linecap="round" stroke-width="7" />
-              <path d="M350 137q9-7 18 0m22 0q9-7 18 0" fill="none" stroke="#21191b" stroke-linecap="round" stroke-width="3" />
-              <ellipse cx="360" cy="144" rx="4" ry="5" fill="#f1dfca" />
-              <ellipse cx="398" cy="144" rx="4" ry="5" fill="#f1dfca" />
-              <circle cx="361" cy="145" r="2" fill="#17181a" />
-              <circle cx="397" cy="145" r="2" fill="#17181a" />
-              <path d="M379 145q-4 12 2 14" fill="none" stroke="#3a2926" stroke-linecap="round" stroke-width="2" />
-              <path d="M367 166q12 8 24 0" fill="none" stroke="#3d2020" stroke-linecap="round" stroke-width="3" />
-              <path d="M343 157q3 35 37 39 34-4 39-39" fill="none" stroke="#442b27" stroke-opacity=".48" stroke-width="2" />
-              <circle cx="340" cy="151" r="6" fill="#d9a95e" />
-              <circle cx="420" cy="151" r="6" fill="#d9a95e" />
-              <path d="M337 230q-17 11-27 35" fill="none" stroke="url(#afi-skin)" stroke-linecap="round" stroke-width="13" />
-              <path d="M442 231q15 9 23 25" fill="none" stroke="url(#afi-skin)" stroke-linecap="round" stroke-width="13" />
-              <path d="M462 252v-17q0-5 4-5t4 5v10l3-14q1-5 5-3 4 1 2 6l-4 20q-3 10-13 8l-8-5q-5-4-1-8 3-3 8 3Z" fill="#573323" />
-              <path d="m368 213 12 14m28-14-12 14" stroke="#f8d49b" stroke-width="2" opacity=".9" />
-            </g>
-          </svg>
-          <div class="scene-caption">
-            <span class="live-dot"></span>
-            <span>{{ routeStop.city }} · {{ mission.kicker }}</span>
-          </div>
-          <div class="scene-frequency" :class="{ 'has-signal': missionNumber > 0 }" aria-label="État de la diffusion">
-            <span v-for="bar in 5" :key="bar"></span>
-            <span class="frequency-label">DIRECT</span>
-          </div>
-        </div>
-
+      <section
+        v-else-if="selectedDomain.mode === 'histoire' && !domainStoryAcknowledged"
+        id="mission"
+        class="game-screen"
+        aria-live="polite"
+      >
+        <button class="history-toggle" type="button" @click="openDomainSelector">
+          <span aria-hidden="true">←</span> Changer de domaine
+        </button>
         <div class="dialogue-box">
           <svg class="radio-avatar" viewBox="0 0 64 64" role="img" aria-label="Mina, animatrice béninoise fictive">
             <defs>
@@ -1632,9 +1504,9 @@ onBeforeUnmount(() => {
           <div class="dialogue-content">
             <div class="dialogue-name">
               <span>Mina</span>
-              <span class="speaker-role">Animatrice radio</span>
+              <span class="speaker-role">{{ selectedDomain.story?.kicker }}</span>
             </div>
-            <p>{{ mission.story }}</p>
+            <p>{{ selectedDomain.story?.body }}</p>
           </div>
           <span class="dialogue-caret" aria-hidden="true">▼</span>
         </div>
@@ -1642,27 +1514,45 @@ onBeforeUnmount(() => {
         <div class="mission-card">
           <div class="mission-heading">
             <div>
-              <span class="eyebrow">Objectif de mission</span>
-              <h2>{{ mission.title }}</h2>
+              <span class="eyebrow">{{ selectedDomain.label }}</span>
+              <h2>{{ selectedDomain.story?.title }}</h2>
             </div>
-            <span class="mission-index" aria-hidden="true">
-              {{ String(missionNumber + 1).padStart(2, "0") }}
-            </span>
           </div>
-          <span class="prompt-label">Quelle annonce aimerais-tu proposer en fon ?</span>
+          <div class="actions">
+            <button class="button" type="button" @click="acknowledgeDomainStory">
+              Continuer →
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section v-else-if="!itemFinished" id="mission" class="game-screen" aria-live="polite">
+        <button class="history-toggle" type="button" @click="openDomainSelector">
+          <span aria-hidden="true">←</span> Changer de domaine
+        </button>
+        <div class="mission-card">
+          <div class="mission-heading">
+            <div>
+              <span class="eyebrow">{{ selectedDomain.label }}</span>
+              <h2>Quel mot ou quelle phrase veux-tu traduire ?</h2>
+            </div>
+          </div>
+          <span class="prompt-label">
+            {{ selectedDomain.mode === "histoire" ? "Quelle annonce aimerais-tu proposer en fon ?" : "Choisis un élément à traduire" }}
+          </span>
           <div class="choices">
             <button
-              v-for="(choice, index) in mission.choices"
-              :key="choice.text"
+              v-for="(item, index) in selectedDomain.items"
+              :key="item.text"
               class="choice"
               type="button"
-              :aria-pressed="selectedChoice?.text === choice.text"
-              :class="{ 'is-selected': selectedChoice?.text === choice.text }"
-              :disabled="missionFinished || contributionRecording || contributionSaving"
-              @click="chooseReply(choice)"
+              :aria-pressed="selectedItem?.text === item.text"
+              :class="{ 'is-selected': selectedItem?.text === item.text }"
+              :disabled="contributionRecording || contributionSaving"
+              @click="chooseDomainItem(selectedDomain, item, index)"
             >
-              <span class="choice-index">{{ ["A", "B", "C"][index] }}</span>
-              <span class="choice-text">{{ choice.text }}</span>
+              <span class="choice-index">{{ item.kind === "mot" ? "Mot" : item.kind === "paragraphe" ? "Paragraphe" : "Phrase" }}</span>
+              <span class="choice-text">{{ item.text }}</span>
               <span class="choice-arrow" aria-hidden="true">↗</span>
             </button>
           </div>
@@ -1676,17 +1566,16 @@ onBeforeUnmount(() => {
           <span class="ending-signal signal-three"></span>
           <span class="ending-star">♫</span>
         </div>
-        <span class="eyebrow">Chapitre terminé</span>
-        <h2>Le carnet d'émission est prêt.</h2>
+        <span class="eyebrow">Domaine terminé</span>
+        <h2>Merci pour ta contribution.</h2>
         <p>
-          Tu as préparé les trois épisodes de la radio.
           {{ savedContributions }} contribution{{ savedContributions === 1 ? "" : "s" }}
-          enregistrée{{ savedContributions === 1 ? "" : "s" }} avec consentement.
-          Les propositions en fon restent à vérifier par des locuteurs et ne
+          enregistrée{{ savedContributions === 1 ? "" : "s" }} avec consentement, tous domaines
+          confondus. Les propositions en fon restent à vérifier par des locuteurs et ne
           représentent pas toutes les voix du Bénin.
         </p>
-        <button class="button" type="button" @click="restartChapter">
-          Rejouer le chapitre
+        <button class="button" type="button" @click="openDomainSelector">
+          ← Choisir un autre domaine
         </button>
       </section>
       </template>
@@ -1702,18 +1591,18 @@ onBeforeUnmount(() => {
       </section>
 
       <section
-        v-if="contributionMode === 'free' || (!isComplete && selectedChoice && !missionFinished)"
+        v-if="contributionMode === 'free' || (selectedItem && !itemFinished)"
         id="contribution"
         class="card task"
       >
         <div class="task-questline">
           <span class="task-badge" aria-hidden="true">✦</span>
           <div>
-            <span class="eyebrow">{{ contributionMode === 'mission' ? "Quête facultative" : "Contribution libre" }}</span>
-            <h3>{{ contributionMode === 'mission' ? "Prêter sa voix à la radio" : "Partager une traduction et sa prononciation" }}</h3>
+            <span class="eyebrow">{{ contributionMode === 'domain' ? "Quête facultative" : "Contribution libre" }}</span>
+            <h3>{{ contributionMode === 'domain' ? "Prêter sa voix à la radio" : "Partager une traduction et sa prononciation" }}</h3>
           </div>
         </div>
-        <p v-if="contributionMode === 'mission'">
+        <p v-if="contributionMode === 'domain'">
           Propose une formulation en fon dont tu connais l'usage, puis lis exactement ta phrase à
           voix haute : l'enregistrement est nécessaire pour contribuer.
         </p>
@@ -1721,7 +1610,7 @@ onBeforeUnmount(() => {
           Écris une phrase en français, sa traduction en fon, puis lis-la à voix haute.
         </p>
 
-        <template v-if="contributionMode === 'mission'">
+        <template v-if="contributionMode === 'domain'">
           <span class="prompt-label">Phrase proposée</span>
           <p class="locked-text">{{ contributionFrench }}</p>
         </template>
@@ -1785,11 +1674,11 @@ onBeforeUnmount(() => {
         </p>
         <div class="actions">
           <button
-            v-if="contributionMode === 'mission'"
+            v-if="contributionMode === 'domain'"
             class="button button-secondary"
             type="button"
             :disabled="contributionRecording || contributionSaving"
-            @click="finishMission(false)"
+            @click="finishDomainItem(false)"
           >
             Continuer sans contribuer
           </button>
@@ -1805,20 +1694,20 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <template v-if="contributionMode === 'mission'">
-        <p v-if="!isComplete && mission" class="status" :data-state="gameStatusType" role="status" aria-live="polite">
+      <template v-if="contributionMode === 'domain'">
+        <p v-if="selectedItem" class="status" :data-state="gameStatusType" role="status" aria-live="polite">
           {{ gameStatus }}
         </p>
-        <div v-if="!isComplete && missionFinished" class="mission-reward">
+        <div v-if="itemFinished" class="mission-reward">
           <span class="reward-star" aria-hidden="true">✦</span>
           <div>
-            <strong>Épisode prêt pour la radio fictive</strong>
-            <span>{{ selectedChoice?.outcome }}</span>
+            <strong>Contribution enregistrée pour {{ selectedDomain?.label }}</strong>
+            <span>Merci d'avoir prêté ta voix à ce domaine.</span>
           </div>
         </div>
-        <div v-if="!isComplete && missionFinished" class="actions">
-          <button class="button" type="button" @click="nextMission">
-            {{ missionNumber === missions.length - 1 ? "Terminer le chapitre" : "Mission suivante →" }}
+        <div v-if="itemFinished" class="actions">
+          <button class="button" type="button" @click="openDomainSelector">
+            ← Choisir un autre domaine
           </button>
         </div>
       </template>

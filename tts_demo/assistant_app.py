@@ -170,22 +170,26 @@ def persist_training_phrase(
     fon_text,
     human_audio,
     synthesized_audio,
-    contribution_source="free_collecte",
+    contribution_source="libre",
     mission_id=None,
     mission_title=None,
     generate_synthesis=True,
     speaker_id=None,
     speaker_label=None,
     self_reviewed=False,
+    content_mode="libre",
 ):
     phrase_dir = DATASET_DIR / "phrase-pairs"
     phrase_dir.mkdir(parents=True, exist_ok=True)
     sample_id = str(uuid.uuid4())
     if synthesized_audio is None and generate_synthesis:
         synthesized_audio = base64.b64decode(encode_audio_wav(synthesize(fon_text)))
+    # "histoire"/"phrases" domains offer a curated item to translate (same trust
+    # level the old "game_mission" source had); "libre" is authored by the
+    # contributor themselves, so its human reading is a direct TTS target.
     human_audio_role = (
         "human_recording_for_review"
-        if contribution_source == "game_mission"
+        if content_mode in ("histoire", "phrases")
         else "human_tts_training_target"
     )
     metadata = {
@@ -196,6 +200,8 @@ def persist_training_phrase(
         "speaker_id": speaker_id,
         "speaker_label": speaker_label,
         "contribution_source": contribution_source,
+        "domain": contribution_source,
+        "content_mode": content_mode,
         "review_status": "self-reviewed" if self_reviewed else "unreviewed",
         "mission_id": mission_id,
         "mission_title": mission_title,
@@ -1268,24 +1274,34 @@ async def save_training_phrase_request(request: Request):
         raise HTTPException(status_code=400, detail="La traduction en fon est obligatoire.")
     if len(fon_text) > 500:
         raise HTTPException(status_code=400, detail="La traduction en fon dépasse 500 caractères.")
-    contribution_source = payload.get("source") or "free_collecte"
-    if contribution_source not in ("game_mission", "free_collecte"):
+    contribution_source = payload.get("source") or payload.get("domain") or "libre"
+    if (
+        not isinstance(contribution_source, str)
+        or not contribution_source.strip()
+        or len(contribution_source) > 60
+    ):
         raise HTTPException(status_code=400, detail="La source de contribution est invalide.")
+    contribution_source = contribution_source.strip()
+
+    content_mode = payload.get("content_mode") or ("libre" if contribution_source == "libre" else "phrases")
+    if content_mode not in ("histoire", "phrases", "libre"):
+        raise HTTPException(status_code=400, detail="Le mode de contenu est invalide.")
+
     mission_id = payload.get("mission_id")
     mission_title = payload.get("mission_title")
-    if contribution_source == "game_mission":
+    if content_mode != "libre":
         if (
             not isinstance(mission_id, str)
             or not mission_id.strip()
             or len(mission_id) > 80
         ):
-            raise HTTPException(status_code=400, detail="L'identifiant de mission est invalide.")
+            raise HTTPException(status_code=400, detail="L'identifiant de domaine est invalide.")
         if (
             not isinstance(mission_title, str)
             or not mission_title.strip()
             or len(mission_title) > 120
         ):
-            raise HTTPException(status_code=400, detail="Le titre de mission est invalide.")
+            raise HTTPException(status_code=400, detail="Le titre de domaine est invalide.")
 
     if payload.get("self_reviewed") is not True:
         raise HTTPException(
@@ -1319,6 +1335,7 @@ async def save_training_phrase_request(request: Request):
             speaker_id,
             speaker_label,
             True,
+            content_mode,
         )
     except Exception as error:
         LOGGER.exception("Could not save a consented Fon phrase pair")
