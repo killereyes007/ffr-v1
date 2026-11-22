@@ -1,77 +1,47 @@
 /*
-  Direction E (locked Round 1 — see /ROUND-2-CONTEXT.md at the project root):
-  French interface chrome recedes (quiet), Fon-coded/collective content dominates
-  (dominant), and exactly one call-to-action per screen is marked (bridge).
-  Self-hosted OFL fonts — no Google Fonts, no CDN.
+  Direction A (locked Round 1, batch 2 — see /ROUND-2-CONTEXT.md at the project root):
+  tuning a radio dial. One typeface (Jost, variable), one hue (amber #ffb020) on
+  a near-black ground. Meaning is carried entirely by a weight/tracking/case/
+  opacity sweep from "static" (weak signal) to "signal" (resolved), never by a
+  second color. Four reusable steps: static / tuning / settled / signal.
+  Self-hosted OFL font — no Google Fonts, no CDN.
 */
 @font-face {
-  font-family: "CarnetDominant";
-  src: url("/game-assets/fonts/charis/Charis-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "CarnetDominant";
-  src: url("/game-assets/fonts/charis/Charis-Bold.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "CarnetDominant";
-  src: url("/game-assets/fonts/charis/Charis-Italic.woff2") format("woff2");
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-@font-face {
-  font-family: "CarnetQuiet";
-  src: url("/game-assets/fonts/league-gothic/LeagueGothic-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "CarnetQuietCondensed";
-  src: url("/game-assets/fonts/league-gothic/LeagueGothic-Condensed.woff2") format("woff2");
-  font-weight: 400;
+  font-family: "JostVF";
+  src: url("/game-assets/fonts/jost/Jost-VF.ttf") format("truetype-variations");
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
-  color-scheme: light;
-  font-family: "CarnetQuiet", Georgia, "Times New Roman", serif;
-  background: #f7f3ea;
-  color: #3c352c;
+  color-scheme: dark;
+  font-family: "JostVF", sans-serif;
+  background: #120f0c;
+  color: rgba(255, 176, 32, 0.85);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
-  /* paper canvas */
-  --paper: #f7f3ea;
-  --paper-raised: #efe9db;
-  --paper-sunken: #e9e2d2;
-  --line: rgba(60, 50, 34, 0.16);
-  --line-strong: rgba(60, 50, 34, 0.28);
+  /* canvas */
+  --ground: #120f0c;
+  --surface-raised: #1c1712;
+  --surface-sunken: #0b0907;
+  --line: rgba(255, 176, 32, 0.14);
+  --line-strong: rgba(255, 176, 32, 0.28);
 
-  /* the three roles */
-  --dominant: #9c2b1f;
-  --dominant-dim: rgba(156, 43, 31, 0.1);
-  --quiet: #9b9488;
-  --quiet-strong: #6f6a60;
-  --bridge: #b8860b;
-  --bridge-dim: rgba(184, 134, 11, 0.12);
+  /* the one hue, at the four step opacities */
+  --signal-hue: #ffb020;
+  --ink-static: rgba(255, 176, 32, 0.35);
+  --ink-tuning: rgba(255, 176, 32, 0.65);
+  --ink-settled: rgba(255, 176, 32, 0.85);
+  --ink-signal: #ffb020;
+  --ink-signal-dim: rgba(255, 176, 32, 0.14);
 
-  /* neutral reading ink for the rare unclassified fragment */
-  --ink: #3c352c;
-
-  /* functional UI state (outside the 3-role identity system) */
-  --status-error: #a3402c;
-  --status-success: #4b7a4f;
-
-  --gold: var(--bridge);
-  --muted: var(--quiet);
+  /* functional UI state (outside the weight-sweep hierarchy, kept rare) */
+  --status-error: #ff6b57;
+  --status-error-dim: rgba(255, 107, 87, 0.12);
+  --status-success: #6fcf7a;
+  --status-success-dim: rgba(111, 207, 122, 0.12);
 }
 
 * {
@@ -92,12 +62,13 @@ body {
   margin: 0;
   padding: 20px 14px;
   place-items: center;
-  background: var(--paper-sunken);
+  background: var(--surface-sunken);
 }
 
 button,
 textarea,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -125,8 +96,29 @@ a {
   padding: 8px 18px 0;
   border: 1px solid var(--line-strong);
   border-radius: 38px;
-  background: var(--paper);
-  box-shadow: 0 24px 60px rgba(60, 50, 34, 0.16);
+  background: var(--ground);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Static step: eyebrows, meta/status text, captions --- */
+.eyebrow,
+.phone-status,
+.domain-card-mode,
+.choice-index,
+.dialogue-name,
+.speaker-role,
+.status,
+.hint,
+.small-note,
+.install-status,
+.welcome-action-copy b,
+.brand div span {
+  font-family: "JostVF", sans-serif;
+  font-weight: 200;
+  font-variation-settings: "wght" 150;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-static);
 }
 
 .phone-status {
@@ -136,12 +128,7 @@ a {
   align-items: center;
   justify-content: space-between;
   padding: 0 10px;
-  color: var(--quiet-strong);
-  font-family: "CarnetQuietCondensed", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   font-size: 12px;
-  font-weight: 400;
 }
 
 .phone-status-icons {
@@ -167,7 +154,7 @@ a {
   width: 19px;
   height: 10px;
   padding: 2px;
-  border: 1px solid var(--quiet-strong);
+  border: 1px solid var(--ink-static);
   border-radius: 3px;
 }
 
@@ -178,7 +165,7 @@ a {
   width: 2px;
   height: 4px;
   border-radius: 0 2px 2px 0;
-  background: var(--quiet-strong);
+  background: var(--ink-static);
   content: "";
 }
 
@@ -187,7 +174,7 @@ a {
   width: 72%;
   height: 100%;
   border-radius: 1px;
-  background: var(--quiet-strong);
+  background: var(--ink-static);
 }
 
 header {
@@ -216,7 +203,7 @@ header {
   flex: none;
   place-items: center;
   border-radius: 14px;
-  background: var(--paper-raised);
+  background: var(--surface-raised);
   border: 1px solid var(--line);
 }
 
@@ -231,20 +218,17 @@ header {
   display: block;
 }
 
+/* the app's own identity: signal step */
 .brand strong {
-  font-family: "CarnetDominant", serif;
-  font-weight: 700;
-  color: var(--dominant);
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
+  color: var(--ink-signal);
   font-size: 15px;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 .brand div span {
   margin-top: 2px;
-  font-family: "CarnetQuietCondensed", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--quiet);
   font-size: 11px;
 }
 
@@ -256,8 +240,8 @@ header {
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 50%;
-  background: var(--paper-raised);
-  color: var(--quiet-strong);
+  background: var(--surface-raised);
+  color: var(--ink-settled);
   font-size: 24px;
   line-height: 1;
   text-decoration: none;
@@ -266,8 +250,8 @@ header {
 
 .home-link:hover,
 .home-link:focus-visible {
-  border-color: var(--gold);
-  color: var(--gold);
+  border-color: var(--ink-signal);
+  color: var(--ink-signal);
 }
 
 main {
@@ -285,20 +269,22 @@ main::-webkit-scrollbar {
 }
 
 .eyebrow {
-  font-family: "CarnetQuietCondensed", sans-serif;
-  color: var(--quiet);
   font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
 }
 
+/* --- Signal step: screen titles, the game's own name --- */
 h1,
 h2,
-h3 {
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
-  font-weight: 400;
+h3,
+.dominant {
+  font-family: "JostVF", sans-serif;
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-signal);
+  opacity: 0;
+  animation: signal-resolve 0.65s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
 h1 {
@@ -306,22 +292,41 @@ h1 {
   margin: 9px 0 7px;
   font-size: clamp(29px, 8vw, 36px);
   line-height: 1.02;
-  letter-spacing: -0.01em;
 }
 
-.dominant {
-  font-family: "CarnetDominant", serif;
-  font-weight: 700;
-  font-style: normal;
-  color: var(--dominant);
-  letter-spacing: 0;
+@keyframes signal-resolve {
+  from {
+    opacity: 0;
+    font-variation-settings: "wght" 200;
+    letter-spacing: 0.1em;
+  }
+  to {
+    opacity: 1;
+    font-variation-settings: "wght" 850;
+    letter-spacing: 0;
+  }
 }
 
+/* --- Tuning step: body copy, descriptions, paragraph text --- */
 .intro,
 .story-copy,
-.hint {
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
+.welcome-hero p,
+.welcome-note,
+.welcome-action-copy small,
+.task p,
+.free-contribution-intro p,
+.mission-reward span:not(.reward-star),
+.dialogue-content p,
+.result p,
+.onboarding-list li span,
+.welcome-radio-caption,
+.consent span {
+  font-family: "JostVF", sans-serif;
+  font-weight: 400;
+  font-variation-settings: "wght" 350;
+  text-transform: none;
+  letter-spacing: 0.03em;
+  color: var(--ink-tuning);
   line-height: 1.55;
 }
 
@@ -340,7 +345,7 @@ h1 {
   padding: 21px;
   border: 1px solid var(--line);
   border-radius: 24px;
-  background: var(--paper-raised);
+  background: var(--surface-raised);
 }
 
 .welcome-hero h1 {
@@ -351,10 +356,8 @@ h1 {
 
 .welcome-hero p,
 .welcome-note {
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
   font-size: 13px;
-  line-height: 1.55;
+  letter-spacing: 0.02em;
 }
 
 .welcome-hero p {
@@ -372,7 +375,7 @@ h1 {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: var(--paper-sunken);
+  background: var(--surface-sunken);
 }
 
 .welcome-radio-sun {
@@ -383,14 +386,16 @@ h1 {
   aspect-ratio: 1;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
+  animation: signal-pulse 3.2s ease-in-out infinite;
 }
 
+/* the station identity: signal step */
 .welcome-radio-sign {
   z-index: 1;
-  font-family: "CarnetDominant", serif;
-  color: var(--dominant);
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
+  color: var(--ink-signal);
   font-size: 22px;
-  font-weight: 700;
   letter-spacing: 0;
 }
 
@@ -398,22 +403,43 @@ h1 {
   position: absolute;
   top: 12px;
   left: 14px;
-  font-family: "CarnetDominant", serif;
-  color: var(--dominant);
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
 }
 
 .welcome-radio-bars {
   z-index: 1;
+  display: flex;
+  gap: 2px;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--paper);
-  color: var(--quiet);
+  background: var(--ground);
+  color: var(--ink-tuning);
   font-size: 20px;
   letter-spacing: 2px;
+}
+
+.welcome-radio-bars span {
+  display: inline-block;
+  animation: bar-breathe 1.8s ease-in-out infinite;
+}
+
+.welcome-radio-bars span:nth-child(2) { animation-delay: 0.12s; }
+.welcome-radio-bars span:nth-child(3) { animation-delay: 0.24s; }
+.welcome-radio-bars span:nth-child(4) { animation-delay: 0.36s; }
+.welcome-radio-bars span:nth-child(5) { animation-delay: 0.48s; }
+.welcome-radio-bars span:nth-child(6) { animation-delay: 0.6s; }
+
+@keyframes bar-breathe {
+  0%, 100% { opacity: 0.45; transform: scaleY(0.85); }
+  50% { opacity: 1; transform: scaleY(1.1); }
+}
+
+@keyframes signal-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
 }
 
 .welcome-heading {
@@ -423,7 +449,6 @@ h1 {
 .welcome-heading h2 {
   margin: 6px 0 0;
   font-size: 24px;
-  letter-spacing: -0.01em;
 }
 
 .welcome-action {
@@ -434,17 +459,24 @@ h1 {
   padding: 17px;
   border: 1px solid var(--line);
   border-radius: 19px;
-  background: var(--paper-raised);
-  color: var(--quiet-strong);
+  background: var(--surface-raised);
+  color: var(--ink-tuning);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.welcome-action:hover,
+.welcome-action:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--ground);
 }
 
 .welcome-action-primary {
-  border-color: var(--dominant-dim);
-  background: var(--paper);
-  box-shadow: inset 2px 0 var(--dominant);
+  border-color: var(--ink-signal-dim);
+  background: var(--ground);
+  box-shadow: inset 2px 0 var(--ink-signal);
 }
 
 .welcome-action-icon {
@@ -454,8 +486,8 @@ h1 {
   flex: none;
   place-items: center;
   border-radius: 13px;
-  background: var(--paper-sunken);
-  color: var(--quiet-strong);
+  background: var(--surface-sunken);
+  color: var(--ink-settled);
   font-size: 20px;
   font-weight: 700;
 }
@@ -469,20 +501,21 @@ h1 {
 }
 
 .welcome-action-copy strong {
-  font-family: "CarnetQuiet", Georgia, serif;
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  color: var(--ink-settled);
   font-size: 15px;
-  font-weight: 400;
 }
 
+/* the primary call-to-action on the home screen: signal step */
 .welcome-action-primary .welcome-action-copy strong {
-  font-family: "CarnetDominant", serif;
-  color: var(--dominant);
-  font-weight: 700;
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
+  color: var(--ink-signal);
 }
 
 .welcome-action-copy small {
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -491,11 +524,6 @@ h1 {
   display: flex;
   justify-content: space-between;
   margin-top: 5px;
-  font-family: "CarnetQuietCondensed", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 400;
-  color: var(--quiet);
   font-size: 12px;
 }
 
@@ -519,17 +547,18 @@ h1 {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: var(--paper-raised);
-  color: var(--quiet-strong);
+  background: var(--surface-raised);
+  color: var(--ink-settled);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .domain-card:hover,
 .domain-card:focus-visible {
-  border-color: var(--dominant-dim);
-  background: var(--paper);
+  border-color: var(--ink-signal-dim);
+  background: var(--ground);
 }
 
 .domain-card-icon {
@@ -538,31 +567,29 @@ h1 {
   height: 34px;
   place-items: center;
   border-radius: 11px;
-  background: var(--dominant-dim);
-  color: var(--dominant);
+  background: var(--ink-signal-dim);
+  color: var(--ink-signal);
   font-size: 16px;
   font-weight: 700;
 }
 
+/* domain names are contribution targets: signal step */
 .domain-card-label {
-  font-family: "CarnetDominant", serif;
-  color: var(--dominant);
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
+  color: var(--ink-signal);
   font-size: 13.5px;
-  font-weight: 700;
   line-height: 1.25;
 }
 
 .domain-card-mode {
-  font-family: "CarnetQuietCondensed", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--quiet);
   font-size: 10px;
+  letter-spacing: 0.1em;
 }
 
 .domain-card-free {
   border-style: dashed;
-  background: var(--paper);
+  background: var(--ground);
 }
 
 .install-banner {
@@ -571,10 +598,10 @@ h1 {
   align-items: center;
   gap: 14px;
   padding: 15px 17px;
-  border: 1px solid var(--bridge);
+  border: 1px solid var(--ink-signal);
   border-radius: 16px;
-  background: var(--bridge-dim);
-  color: var(--quiet-strong);
+  background: var(--ink-signal-dim);
+  color: var(--ink-settled);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -582,7 +609,7 @@ h1 {
 }
 
 .install-banner:hover {
-  background: rgba(184, 134, 11, 0.2);
+  background: rgba(255, 176, 32, 0.22);
   transform: translateY(-1px);
 }
 
@@ -591,12 +618,12 @@ h1 {
 }
 
 .install-banner-ios:hover {
-  background: var(--bridge-dim);
+  background: var(--ink-signal-dim);
   transform: none;
 }
 
 .install-banner-ios b {
-  color: var(--bridge);
+  color: var(--ink-signal);
 }
 
 .install-banner-icon {
@@ -606,8 +633,8 @@ h1 {
   flex: none;
   place-items: center;
   border-radius: 50%;
-  background: var(--bridge);
-  color: var(--paper);
+  background: var(--ink-signal);
+  color: var(--ground);
   font-size: 16px;
   font-weight: 700;
 }
@@ -620,30 +647,28 @@ h1 {
   gap: 3px;
 }
 
+/* the one call-to-action this banner carries: signal step */
 .install-banner-copy strong {
-  font-family: "CarnetDominant", serif;
-  font-style: italic;
-  color: var(--bridge);
+  font-family: "JostVF", sans-serif;
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
+  color: var(--ink-signal);
   font-size: 15px;
-  font-weight: 400;
 }
 
 .install-banner-copy small {
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
   font-size: 11.5px;
   line-height: 1.4;
 }
 
 .install-banner-arrow {
   flex: none;
-  color: var(--bridge);
+  color: var(--ink-signal);
   font-size: 18px;
 }
 
 .install-status {
   margin: 0 2px;
-  color: var(--quiet);
   font-size: 12px;
 }
 
@@ -652,9 +677,7 @@ h1 {
   align-items: center;
   gap: 10px;
   margin: 17px 0 14px;
-  color: var(--quiet);
   font-size: 11px;
-  font-weight: 400;
 }
 
 .progress {
@@ -662,14 +685,14 @@ h1 {
   flex: 1;
   overflow: hidden;
   border-radius: 99px;
-  background: var(--paper-sunken);
+  background: var(--surface-sunken);
 }
 
 .progress span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--bridge);
+  background: var(--ink-signal);
   transition: width 0.25s ease;
 }
 
@@ -677,7 +700,7 @@ h1 {
   padding: 19px 17px;
   border: 1px solid var(--line);
   border-radius: 23px;
-  background: var(--paper-raised);
+  background: var(--surface-raised);
 }
 
 .mission-heading {
@@ -691,7 +714,6 @@ h1 {
   margin: 6px 0 0;
   font-size: 23px;
   line-height: 1.12;
-  letter-spacing: -0.01em;
 }
 
 .story-copy {
@@ -699,25 +721,18 @@ h1 {
   font-size: 13px;
 }
 
+/* form field labels: settled step */
 .prompt-label {
   display: block;
   margin: 19px 0 9px;
-  font-family: "CarnetQuietCondensed", sans-serif;
-  color: var(--quiet);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.45;
-}
-
-.prompt-label-dominant {
-  font-family: "CarnetDominant", serif;
-  color: var(--dominant);
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
   text-transform: none;
   letter-spacing: 0;
-  font-size: 14px;
-  font-weight: 700;
+  color: var(--ink-settled);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .choices {
@@ -725,15 +740,18 @@ h1 {
   gap: 8px;
 }
 
+/* domain items are list rows: settled step */
 .choice {
   width: 100%;
   min-height: 50px;
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--paper);
-  color: var(--quiet-strong);
-  font-family: "CarnetQuiet", Georgia, serif;
+  background: var(--ground);
+  color: var(--ink-settled);
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
   font-size: 13px;
   line-height: 1.45;
   text-align: left;
@@ -746,13 +764,13 @@ h1 {
 
 .choice:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: var(--dominant-dim);
+  border-color: var(--ink-signal-dim);
 }
 
 .choice[aria-pressed="true"] {
-  border-color: var(--dominant);
-  background: var(--dominant-dim);
-  box-shadow: inset 3px 0 var(--dominant);
+  border-color: var(--ink-signal);
+  background: var(--ink-signal-dim);
+  box-shadow: inset 3px 0 var(--ink-signal);
 }
 
 .choice:disabled {
@@ -774,20 +792,20 @@ h1 {
 
 .free-contribution-intro p {
   margin: 8px 0 0;
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
   font-size: 12px;
-  line-height: 1.55;
 }
 
+/* a read-only proposed value behaves like a settled form field */
 .locked-text {
   margin: 0;
   padding: 12px 13px;
   border: 1px solid var(--line);
   border-radius: 13px;
-  background: var(--paper-sunken);
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
+  background: var(--surface-sunken);
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  color: var(--ink-settled);
   font-size: 14px;
 }
 
@@ -803,13 +821,12 @@ h1 {
 
 .task p {
   margin: 0 0 12px;
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
   font-size: 12px;
-  line-height: 1.55;
 }
 
-textarea {
+textarea,
+input[type="text"],
+input[type="password"] {
   display: block;
   width: 100%;
   min-height: 88px;
@@ -817,31 +834,24 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 13px;
   outline: none;
-  background: var(--paper-sunken);
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
+  background: var(--surface-sunken);
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  color: var(--ink-settled);
   font-size: 14px;
   resize: vertical;
 }
 
-textarea:focus {
-  border-color: var(--quiet-strong);
+input[type="text"],
+input[type="password"] {
+  min-height: auto;
+}
+
+textarea:focus,
+input:focus {
+  border-color: var(--ink-settled);
   box-shadow: 0 0 0 3px var(--line);
-}
-
-/* the fon text is the contribution target itself: dominant role */
-#contribution-fon,
-#assistant-answer {
-  border-color: var(--dominant-dim);
-  font-family: "CarnetDominant", serif;
-  color: var(--dominant);
-  font-weight: 700;
-}
-
-#contribution-fon:focus,
-#assistant-answer:focus {
-  border-color: var(--dominant);
-  box-shadow: 0 0 0 3px var(--dominant-dim);
 }
 
 .record-row {
@@ -853,28 +863,31 @@ textarea:focus {
 }
 
 /*
-  Bridge role: the bare `.button` class is used throughout the template for
-  exactly one primary action per screen — this is where the single bridge
-  element per screen lives. `.button-secondary` carries the quiet register
-  for every other action (skip, preview, re-record, undo).
+  Signal step: the bare `.button` class is used throughout the template for
+  exactly one primary action per screen — this is the resolved call-to-action.
+  `.button-secondary` carries the settled register for every other action
+  (skip, preview, re-record, undo).
 */
 .button {
   min-height: 48px;
   padding: 12px 16px;
-  border: 1px solid var(--bridge);
+  border: 1px solid var(--ink-signal);
   border-radius: 15px;
-  background: var(--paper);
-  color: var(--bridge);
-  font-family: "CarnetDominant", serif;
-  font-style: italic;
+  background: var(--ground);
+  color: var(--ink-signal);
+  font-family: "JostVF", sans-serif;
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
+  font-style: normal;
   font-size: 14px;
-  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
 .button:hover:not(:disabled) {
-  background: var(--bridge-dim);
+  background: var(--ink-signal-dim);
 }
 
 .button:active:not(:disabled) {
@@ -883,27 +896,26 @@ textarea:focus {
 
 .button:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 .button-secondary {
   border: 1px solid var(--line);
-  background: var(--paper-raised);
-  color: var(--quiet-strong);
-  font-family: "CarnetQuiet", Georgia, serif;
+  background: var(--surface-raised);
+  color: var(--ink-settled);
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
   font-style: normal;
-  font-weight: 400;
 }
 
 .button-secondary:hover:not(:disabled) {
   border-color: var(--line-strong);
-  background: var(--paper);
+  background: var(--ground);
 }
 
 .hint {
   margin: 9px 0 0 !important;
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet);
   font-size: 11px;
 }
 
@@ -921,9 +933,7 @@ audio {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 13px;
-  background: var(--paper-sunken);
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
+  background: var(--surface-sunken);
   font-size: 11px;
   line-height: 1.5;
   cursor: pointer;
@@ -934,7 +944,7 @@ audio {
   height: 19px;
   flex: none;
   margin: 1px 0 0;
-  accent-color: var(--dominant);
+  accent-color: var(--ink-signal);
 }
 
 .actions {
@@ -946,15 +956,6 @@ audio {
 
 .actions .button {
   width: 100%;
-}
-
-.status {
-  min-height: 18px;
-  margin: 10px 0 0;
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet);
-  font-size: 11px;
-  line-height: 1.5;
 }
 
 .status[data-state="error"] {
@@ -973,12 +974,9 @@ audio {
 .result h2 {
   margin: 9px 0;
   font-size: 29px;
-  letter-spacing: -0.01em;
 }
 
 .result p {
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -987,10 +985,9 @@ audio {
   margin: 17px 2px 0;
   padding: 14px 0 6px;
   border-top: 1px solid var(--line);
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet);
   font-size: 10px;
   line-height: 1.55;
+  letter-spacing: 0.04em;
 }
 
 .phone-nav {
@@ -998,15 +995,16 @@ audio {
   display: grid;
   min-height: 68px;
   flex: none;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   align-items: stretch;
   margin: 0 -18px;
   padding: 5px 8px max(7px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
-  background: var(--paper-raised);
+  background: var(--surface-raised);
 }
 
-.phone-nav-item {
+.phone-nav-item,
+.phone-nav-item-dominant {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -1016,48 +1014,42 @@ audio {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  font-family: "CarnetQuietCondensed", sans-serif;
+  font-family: "JostVF", sans-serif;
+  font-weight: 200;
+  font-variation-settings: "wght" 150;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--quiet);
+  letter-spacing: 0.1em;
+  color: var(--ink-static);
   font-size: 9px;
-  font-weight: 400;
   text-decoration: none;
   cursor: pointer;
+  transition: color 0.15s ease;
 }
 
-.phone-nav-item > span:first-child {
+.phone-nav-item > span:first-child,
+.phone-nav-item-dominant > span:first-child {
   font-size: 16px;
   line-height: 1.15;
 }
 
-.phone-nav-item:hover,
-.phone-nav-item.is-active {
-  color: var(--quiet-strong);
-}
-
-/* the signature relationship: one identical row, one item breaks scale and
-   color from its siblings — no border, no icon badge, weight alone. */
-.phone-nav-item-dominant {
-  font-family: "CarnetDominant", serif;
+/* the active nav item is always the resolved signal, regardless of label */
+.phone-nav-item.is-active,
+.phone-nav-item-dominant.is-active {
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
   text-transform: none;
   letter-spacing: 0;
-  color: var(--dominant);
+  color: var(--ink-signal);
   font-size: 11px;
-  font-weight: 700;
 }
 
-.phone-nav-item-dominant > span:first-child {
+.phone-nav-item.is-active > span:first-child,
+.phone-nav-item-dominant.is-active > span:first-child {
   font-size: 19px;
 }
 
-.phone-nav-item-dominant:hover,
-.phone-nav-item-dominant.is-active {
-  color: var(--dominant);
-}
-
 :focus-visible {
-  outline: 2px solid var(--dominant);
+  outline: 2px solid var(--ink-signal);
   outline-offset: 3px;
 }
 
@@ -1077,6 +1069,7 @@ audio {
   font-size: 9px;
 }
 
+/* the contribution counter: a key number, signal step */
 .signal-count {
   display: flex;
   min-width: 62px;
@@ -1085,11 +1078,10 @@ audio {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  border: 1px solid var(--dominant-dim);
+  border: 1px solid var(--ink-signal-dim);
   border-radius: 14px;
-  background: var(--dominant-dim);
-  color: var(--dominant);
-  font-family: "CarnetDominant", serif;
+  background: var(--ink-signal-dim);
+  color: var(--ink-signal);
   font-size: 13px;
 }
 
@@ -1098,7 +1090,8 @@ audio {
 }
 
 .signal-count strong {
-  font-weight: 700;
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1107,6 +1100,7 @@ audio {
   line-height: 1.6;
 }
 
+/* reused as the "back" control (settled, secondary action) */
 .history-toggle {
   display: flex;
   width: 100%;
@@ -1117,116 +1111,26 @@ audio {
   padding: 9px 11px;
   border: 1px solid var(--line);
   border-radius: 13px;
-  background: var(--paper-raised);
-  font-family: "CarnetQuietCondensed", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--quiet-strong);
+  background: var(--surface-raised);
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-settled);
   font-size: 11px;
-  font-weight: 400;
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .history-toggle > span:first-child {
   font-size: 15px;
 }
 
-.history-toggle-count {
-  margin-left: auto;
-  color: var(--quiet);
-  font-size: 10px;
-  font-weight: 400;
-}
-
 .history-toggle:hover {
   border-color: var(--line-strong);
-  background: var(--paper);
-}
-
-.history-notebook {
-  display: grid;
-  gap: 10px;
-  margin: 0 0 18px;
-  padding: 13px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--paper-sunken);
-}
-
-.history-notebook-heading {
-  padding: 3px 2px 6px;
-}
-
-.history-notebook-heading h2 {
-  margin: 7px 0;
-  font-size: 17px;
-  line-height: 1.25;
-}
-
-.history-notebook-heading > p,
-.history-note > p {
-  margin: 0;
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.history-note {
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: var(--paper);
-}
-
-.history-period {
-  font-family: "CarnetQuietCondensed", sans-serif;
-  color: var(--quiet);
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.history-note h3 {
-  margin: 5px 0 6px;
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.history-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 9px;
-}
-
-.history-sources a {
-  padding: 5px 7px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
-  font-size: 9px;
-  line-height: 1.35;
-  text-decoration: none;
-}
-
-.history-sources a:hover,
-.history-sources a:focus-visible {
-  border-color: var(--line-strong);
-  text-decoration: underline;
-}
-
-.history-editorial-note {
-  margin: 0;
-  padding: 10px 11px;
-  border-left: 2px solid var(--line-strong);
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet);
-  font-size: 10px;
-  line-height: 1.55;
+  background: var(--ground);
 }
 
 .dialogue-box {
@@ -1240,7 +1144,7 @@ audio {
   border: 1px solid var(--line);
   border-top: 0;
   border-radius: 0 0 16px 16px;
-  background: var(--paper-sunken);
+  background: var(--surface-sunken);
 }
 
 .radio-avatar {
@@ -1262,32 +1166,22 @@ audio {
   display: flex;
   align-items: baseline;
   gap: 7px;
-  font-family: "CarnetQuietCondensed", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--quiet-strong);
   font-size: 11px;
-  font-weight: 400;
 }
 
 .speaker-role {
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet);
   font-size: 9px;
-  font-weight: 400;
 }
 
 .dialogue-content p {
   margin: 4px 0 0;
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
   font-size: 11px;
   line-height: 1.45;
 }
 
 .dialogue-caret {
   align-self: flex-end;
-  color: var(--quiet);
+  color: var(--ink-static);
   font-size: 9px;
 }
 
@@ -1296,19 +1190,20 @@ audio {
   padding: 15px 13px 13px;
   border: 1px solid var(--line);
   border-radius: 19px;
-  background: var(--paper-raised);
+  background: var(--surface-raised);
 }
 
 .mission-heading h2 {
   font-size: 19px;
 }
 
+/* the domain name shown here is a contribution target: signal step */
 .mission-heading .eyebrow {
-  font-family: "CarnetDominant", serif;
-  color: var(--dominant);
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
   text-transform: none;
   letter-spacing: 0;
-  font-weight: 700;
+  color: var(--ink-signal);
   font-size: 11px;
 }
 
@@ -1339,32 +1234,31 @@ audio {
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 7px;
-  font-family: "CarnetQuietCondensed", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--quiet);
   font-size: 9px;
-  font-weight: 400;
 }
 
 .choice-text {
   flex: 1;
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  color: var(--ink-settled);
 }
 
 .choice-arrow {
-  color: var(--quiet);
+  color: var(--ink-static);
   font-size: 13px;
   opacity: 0.7;
 }
 
 .choice.is-selected .choice-index {
-  border-color: var(--dominant);
-  background: var(--dominant-dim);
-  color: var(--dominant);
+  border-color: var(--ink-signal);
+  background: var(--ink-signal-dim);
+  color: var(--ink-signal);
 }
 
 .choice.is-selected .choice-arrow {
-  color: var(--dominant);
+  color: var(--ink-signal);
   opacity: 1;
 }
 
@@ -1386,10 +1280,10 @@ audio {
   height: 34px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--dominant-dim);
+  border: 1px solid var(--ink-signal-dim);
   border-radius: 11px;
-  background: var(--dominant-dim);
-  color: var(--dominant);
+  background: var(--ink-signal-dim);
+  color: var(--ink-signal);
   font-size: 16px;
 }
 
@@ -1412,9 +1306,9 @@ audio {
   gap: 10px;
   margin-top: 13px;
   padding: 11px;
-  border: 1px solid rgba(75, 122, 79, 0.3);
+  border: 1px solid var(--status-success-dim);
   border-radius: 13px;
-  background: rgba(75, 122, 79, 0.08);
+  background: var(--status-success-dim);
 }
 
 .reward-star {
@@ -1424,7 +1318,7 @@ audio {
   flex: none;
   place-items: center;
   border-radius: 10px;
-  background: rgba(75, 122, 79, 0.16);
+  background: rgba(111, 207, 122, 0.18);
   color: var(--status-success);
 }
 
@@ -1436,24 +1330,26 @@ audio {
 .mission-reward strong {
   color: var(--status-success);
   font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .mission-reward span:not(.reward-star) {
   margin-top: 3px;
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
   font-size: 9px;
   line-height: 1.4;
 }
 
+/* concentric signal rings double as the "mission complete" art — the same
+   broadcast-ring motif as the direction's premise */
 .ending-art {
   position: relative;
   width: 112px;
   height: 112px;
   margin: 0 auto 15px;
-  border: 1px solid var(--dominant-dim);
+  border: 1px solid var(--ink-signal-dim);
   border-radius: 50%;
-  background: var(--dominant-dim);
+  background: var(--ink-signal-dim);
 }
 
 .ending-signal {
@@ -1462,7 +1358,7 @@ audio {
   left: 37px;
   width: 36px;
   height: 49px;
-  border-right: 2px solid var(--dominant);
+  border-right: 2px solid var(--ink-signal);
   border-radius: 50%;
   transform: rotate(-12deg);
 }
@@ -1485,7 +1381,7 @@ audio {
   position: absolute;
   top: 44px;
   left: 47px;
-  color: var(--dominant);
+  color: var(--ink-signal);
   font-size: 20px;
 }
 
@@ -1493,7 +1389,7 @@ audio {
   body {
     display: block;
     padding: 0;
-    background: var(--paper);
+    background: var(--ground);
   }
 
   .shell {
@@ -1560,6 +1456,19 @@ audio {
     scroll-behavior: auto !important;
     transition: none !important;
   }
+
+  h1,
+  h2,
+  h3,
+  .dominant {
+    opacity: 1;
+    animation: none !important;
+  }
+
+  .welcome-radio-sun,
+  .welcome-radio-bars span {
+    animation: none !important;
+  }
 }
 
 /* --- Assistant screen (ported from the previous Gradio chat screen) --- */
@@ -1575,19 +1484,17 @@ audio {
 .assistant-head h1 {
   margin: 8px 0 14px;
   font-size: 27px;
-  letter-spacing: -0.03em;
 }
 
+/* the language select is a form control: settled step */
 .assistant-language {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  font-family: "CarnetQuietCondensed", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--quiet);
   font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--ink-settled);
 }
 
 .assistant-language select {
@@ -1595,14 +1502,15 @@ audio {
   padding: 9px 32px 9px 14px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background-color: var(--paper-raised);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239b9488' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-color: var(--surface-raised);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23ffb020' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
-  color: var(--quiet-strong);
+  color: var(--ink-settled);
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
   font: inherit;
-  text-transform: none;
-  letter-spacing: 0;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
@@ -1662,20 +1570,21 @@ audio {
   gap: 10px;
   margin: 4px auto 0;
   padding: 13px 24px;
-  border: 1px solid var(--bridge);
+  border: 1px solid var(--ink-signal);
   border-radius: 999px;
-  background: var(--paper);
-  color: var(--bridge);
-  font-family: "CarnetDominant", serif;
-  font-style: italic;
+  background: var(--ground);
+  color: var(--ink-signal);
+  font-family: "JostVF", sans-serif;
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
+  font-style: normal;
   font-size: 15px;
-  font-weight: 400;
   cursor: pointer;
   transition: transform 0.18s ease, background 0.18s ease;
 }
 
 .mic-button:hover:not(:disabled) {
-  background: var(--bridge-dim);
+  background: var(--ink-signal-dim);
 }
 
 .mic-button svg {
@@ -1684,13 +1593,13 @@ audio {
 }
 
 .mic-button[data-state="listening"] {
-  background: var(--bridge);
-  color: var(--paper);
+  background: var(--ink-signal);
+  color: var(--ground);
   animation: mic-pulse 1.6s ease-in-out infinite;
 }
 
 @keyframes mic-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--bridge-dim); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--ink-signal-dim); }
   50% { box-shadow: 0 0 0 8px transparent; }
 }
 
@@ -1705,7 +1614,7 @@ audio {
   margin: 12px auto 0;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--paper-sunken);
+  background: var(--surface-sunken);
 }
 
 .progress-track[data-mode="hidden"] {
@@ -1715,7 +1624,7 @@ audio {
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: var(--bridge);
+  background: var(--ink-signal);
   transition: width 100ms linear;
 }
 
@@ -1736,7 +1645,7 @@ audio {
   margin-top: 16px;
   padding: 14px;
   border-radius: 15px;
-  background: var(--paper-sunken);
+  background: var(--surface-sunken);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1762,7 +1671,6 @@ audio {
   margin: 10px 0 12px;
   font-size: 25px;
   line-height: 1.15;
-  letter-spacing: -0.03em;
 }
 
 .onboarding-list {
@@ -1780,25 +1688,24 @@ audio {
   padding: 11px 13px;
   border: 1px solid var(--line);
   border-radius: 13px;
-  background: var(--paper-raised);
+  background: var(--surface-raised);
 }
 
 .onboarding-list li strong {
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet-strong);
-  font-weight: 400;
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  color: var(--ink-settled);
   font-size: 13px;
 }
 
 .onboarding-list li strong.dominant {
-  font-family: "CarnetDominant", serif;
-  color: var(--dominant);
-  font-weight: 700;
+  font-weight: 800;
+  font-variation-settings: "wght" 850;
+  color: var(--ink-signal);
 }
 
 .onboarding-list li span {
-  font-family: "CarnetQuiet", Georgia, serif;
-  color: var(--quiet);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -1818,7 +1725,7 @@ audio {
 }
 
 .onboarding-dots span.is-active {
-  background: var(--dominant);
+  background: var(--ink-signal);
 }
 
 .onboarding-actions {
@@ -1828,7 +1735,7 @@ audio {
   margin-top: 20px;
 }
 
-/* the speaker's pseudonym is Fon-coded personal-voice identity: dominant role */
+/* the pseudonym is a plain identity field: settled step, like any form input */
 #speaker-label {
   display: block;
   width: 100%;
@@ -1838,14 +1745,15 @@ audio {
   border: 1px solid var(--line);
   border-radius: 13px;
   outline: none;
-  background: var(--paper-sunken);
-  font-family: "CarnetDominant", serif;
-  color: var(--dominant);
-  font-weight: 700;
+  background: var(--surface-sunken);
+  font-family: "JostVF", sans-serif;
+  color: var(--ink-settled);
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
   font-size: 15px;
 }
 
 #speaker-label:focus {
-  border-color: var(--dominant);
-  box-shadow: 0 0 0 3px var(--dominant-dim);
+  border-color: var(--ink-settled);
+  box-shadow: 0 0 0 3px var(--line);
 }

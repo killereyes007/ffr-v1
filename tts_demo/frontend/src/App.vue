@@ -1214,14 +1214,14 @@ onBeforeUnmount(() => {
           <svg viewBox="0 0 100 100">
             <path
               d="M28,26 C31,36 35,45 37,51 C35,57 31,66 28,76 L72,76 C69,66 65,57 63,51 C65,45 69,36 72,26 Z"
-              fill="#9c2b1f"
-              stroke="#6f6a60"
+              fill="#ffb020"
+              stroke="rgba(255,176,32,0.45)"
               stroke-width="2.6"
             />
             <polyline
               points="28,28 36,38 28,46 37,51 28,58 36,68 28,76"
               fill="none"
-              stroke="#6f6a60"
+              stroke="rgba(255,176,32,0.45)"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -1230,18 +1230,18 @@ onBeforeUnmount(() => {
             <polyline
               points="72,28 64,38 72,46 63,51 72,58 64,68 72,76"
               fill="none"
-              stroke="#6f6a60"
+              stroke="rgba(255,176,32,0.45)"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
               opacity="0.85"
             />
-            <ellipse cx="50" cy="26" rx="22" ry="7" fill="#b8860b" stroke="#6f6a60" stroke-width="2.6" />
-            <ellipse cx="50" cy="76" rx="22" ry="7" fill="#8f6a08" stroke="#6f6a60" stroke-width="2.6" />
-            <path d="M32,17 Q22,13 19,3" fill="none" stroke="#b8860b" stroke-width="3" stroke-linecap="round" />
-            <path d="M68,17 Q78,13 81,3" fill="none" stroke="#b8860b" stroke-width="3" stroke-linecap="round" />
-            <path d="M41,15 Q38,11 36,5" fill="none" stroke="#b8860b" stroke-width="2.6" stroke-linecap="round" />
-            <path d="M59,15 Q62,11 64,5" fill="none" stroke="#b8860b" stroke-width="2.6" stroke-linecap="round" />
+            <ellipse cx="50" cy="26" rx="22" ry="7" fill="#ffb020" stroke="rgba(255,176,32,0.45)" stroke-width="2.6" />
+            <ellipse cx="50" cy="76" rx="22" ry="7" fill="#c47d12" stroke="rgba(255,176,32,0.45)" stroke-width="2.6" />
+            <path d="M32,17 Q22,13 19,3" fill="none" stroke="#ffb020" stroke-width="3" stroke-linecap="round" />
+            <path d="M68,17 Q78,13 81,3" fill="none" stroke="#ffb020" stroke-width="3" stroke-linecap="round" />
+            <path d="M41,15 Q38,11 36,5" fill="none" stroke="#ffb020" stroke-width="2.6" stroke-linecap="round" />
+            <path d="M59,15 Q62,11 64,5" fill="none" stroke="#ffb020" stroke-width="2.6" stroke-linecap="round" />
           </svg>
         </span>
         <div>
@@ -1285,7 +1285,9 @@ onBeforeUnmount(() => {
           <span class="welcome-radio-sun"></span>
           <span class="welcome-radio-sign">FON FM</span>
           <span class="welcome-radio-caption">UN SIGNAL · TOUT UN QUARTIER</span>
-          <span class="welcome-radio-bars">▂ ▅ ▇ ▄ ▆ ▃</span>
+          <span class="welcome-radio-bars">
+            <span>▂</span><span>▅</span><span>▇</span><span>▄</span><span>▆</span><span>▃</span>
+          </span>
         </div>
       </section>
       <div class="welcome-heading">
@@ -1383,8 +1385,8 @@ onBeforeUnmount(() => {
                 <stop offset="1" stop-color="#4a2d24" />
               </linearGradient>
             </defs>
-            <rect width="64" height="64" fill="#e9e2d2" />
-            <path d="M7 64q2-21 25-23 23 2 26 23Z" fill="#9c2b1f" />
+            <rect width="64" height="64" fill="#1c1712" />
+            <path d="M7 64q2-21 25-23 23 2 26 23Z" fill="#ffb020" />
             <path d="m22 42 10 10 10-10" fill="none" stroke="#f8dfae" stroke-width="2" />
             <path d="M25 35h14v12H25z" fill="#573627" />
             <ellipse cx="32" cy="27" rx="18" ry="21" fill="url(#mina-skin)" />
