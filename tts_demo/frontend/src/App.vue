@@ -1185,7 +1185,7 @@ onBeforeUnmount(() => {
         </p>
         <ul v-if="onboardingSlides[onboardingSlideIndex].list" class="onboarding-list">
           <li v-for="item in onboardingSlides[onboardingSlideIndex].list" :key="item.label">
-            <strong>{{ item.label }}</strong>
+            <strong :class="{ dominant: item.label === 'Ma voix' }">{{ item.label }}</strong>
             <span>{{ item.detail }}</span>
           </li>
         </ul>
@@ -1255,14 +1255,14 @@ onBeforeUnmount(() => {
           <svg viewBox="0 0 100 100">
             <path
               d="M28,26 C31,36 35,45 37,51 C35,57 31,66 28,76 L72,76 C69,66 65,57 63,51 C65,45 69,36 72,26 Z"
-              fill="#f5c451"
-              stroke="#10152f"
+              fill="#9c2b1f"
+              stroke="#6f6a60"
               stroke-width="2.6"
             />
             <polyline
               points="28,28 36,38 28,46 37,51 28,58 36,68 28,76"
               fill="none"
-              stroke="#10152f"
+              stroke="#6f6a60"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -1271,18 +1271,18 @@ onBeforeUnmount(() => {
             <polyline
               points="72,28 64,38 72,46 63,51 72,58 64,68 72,76"
               fill="none"
-              stroke="#10152f"
+              stroke="#6f6a60"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
               opacity="0.85"
             />
-            <ellipse cx="50" cy="26" rx="22" ry="7" fill="#ffd877" stroke="#10152f" stroke-width="2.6" />
-            <ellipse cx="50" cy="76" rx="22" ry="7" fill="#e8a23a" stroke="#10152f" stroke-width="2.6" />
-            <path d="M32,17 Q22,13 19,3" fill="none" stroke="#f5c451" stroke-width="3" stroke-linecap="round" />
-            <path d="M68,17 Q78,13 81,3" fill="none" stroke="#f5c451" stroke-width="3" stroke-linecap="round" />
-            <path d="M41,15 Q38,11 36,5" fill="none" stroke="#f5c451" stroke-width="2.6" stroke-linecap="round" />
-            <path d="M59,15 Q62,11 64,5" fill="none" stroke="#f5c451" stroke-width="2.6" stroke-linecap="round" />
+            <ellipse cx="50" cy="26" rx="22" ry="7" fill="#b8860b" stroke="#6f6a60" stroke-width="2.6" />
+            <ellipse cx="50" cy="76" rx="22" ry="7" fill="#8f6a08" stroke="#6f6a60" stroke-width="2.6" />
+            <path d="M32,17 Q22,13 19,3" fill="none" stroke="#b8860b" stroke-width="3" stroke-linecap="round" />
+            <path d="M68,17 Q78,13 81,3" fill="none" stroke="#b8860b" stroke-width="3" stroke-linecap="round" />
+            <path d="M41,15 Q38,11 36,5" fill="none" stroke="#b8860b" stroke-width="2.6" stroke-linecap="round" />
+            <path d="M59,15 Q62,11 64,5" fill="none" stroke="#b8860b" stroke-width="2.6" stroke-linecap="round" />
           </svg>
         </span>
         <div>
@@ -1317,7 +1317,7 @@ onBeforeUnmount(() => {
       </div>
       <section class="welcome-hero">
         <span class="eyebrow">Une aventure à travers le Bénin</span>
-        <h1>Fais entendre ta voix.</h1>
+        <h1 class="dominant">Fais entendre ta voix.</h1>
         <p>
           Suis Afi, messagère d'une radio fictive, de Cotonou à Porto-Novo puis
           Abomey. Rencontre des habitants et prépare des messages en fon.
@@ -1383,7 +1383,7 @@ onBeforeUnmount(() => {
         <div class="chapter-title-row">
           <div>
             <span class="eyebrow">Ma voix · choisis un domaine</span>
-            <h1>Le carnet des voix</h1>
+            <h1 class="dominant">Le carnet des voix</h1>
           </div>
           <div class="signal-count" :aria-label="`${savedContributions} contributions enregistrées`">
             <span aria-hidden="true">♫</span>
@@ -1471,21 +1471,13 @@ onBeforeUnmount(() => {
         <div class="dialogue-box">
           <svg class="radio-avatar" viewBox="0 0 64 64" role="img" aria-label="Mina, animatrice béninoise fictive">
             <defs>
-              <linearGradient id="mina-background" x2="0" y2="1">
-                <stop stop-color="#d79879" />
-                <stop offset="1" stop-color="#385168" />
-              </linearGradient>
               <linearGradient id="mina-skin" x2="1" y2="1">
                 <stop stop-color="#805038" />
                 <stop offset="1" stop-color="#4a2d24" />
               </linearGradient>
-              <linearGradient id="mina-shirt" x2="1" y2="1">
-                <stop stop-color="#e7b54b" />
-                <stop offset="1" stop-color="#2c6e70" />
-              </linearGradient>
             </defs>
-            <rect width="64" height="64" fill="url(#mina-background)" />
-            <path d="M7 64q2-21 25-23 23 2 26 23Z" fill="url(#mina-shirt)" />
+            <rect width="64" height="64" fill="#e9e2d2" />
+            <path d="M7 64q2-21 25-23 23 2 26 23Z" fill="#9c2b1f" />
             <path d="m22 42 10 10 10-10" fill="none" stroke="#f8dfae" stroke-width="2" />
             <path d="M25 35h14v12H25z" fill="#573627" />
             <ellipse cx="32" cy="27" rx="18" ry="21" fill="url(#mina-skin)" />
@@ -1567,7 +1559,7 @@ onBeforeUnmount(() => {
           <span class="ending-star">♫</span>
         </div>
         <span class="eyebrow">Domaine terminé</span>
-        <h2>Merci pour ta contribution.</h2>
+        <h2 class="dominant">Merci pour ta contribution.</h2>
         <p>
           {{ savedContributions }} contribution{{ savedContributions === 1 ? "" : "s" }}
           enregistrée{{ savedContributions === 1 ? "" : "s" }} avec consentement, tous domaines
@@ -1626,7 +1618,7 @@ onBeforeUnmount(() => {
           ></textarea>
         </template>
 
-        <label class="prompt-label" for="contribution-fon">Ta traduction en fon</label>
+        <label class="prompt-label prompt-label-dominant" for="contribution-fon">Ta traduction en fon</label>
         <textarea
           id="contribution-fon"
           v-model="contributionFon"
@@ -1729,7 +1721,7 @@ onBeforeUnmount(() => {
       <section class="card assistant-card">
         <div class="assistant-head">
           <span class="eyebrow">Prototype vocal</span>
-          <h1>Parle, j'écoute.</h1>
+          <h1 class="dominant">Parle, j'écoute.</h1>
           <label class="assistant-language">
             <span>Langue parlée</span>
             <select v-model="assistantLanguage">
@@ -1746,14 +1738,14 @@ onBeforeUnmount(() => {
             aria-label="Guide souriant, un homme en tenue colorée qui vous accueille"
           >
             <svg viewBox="0 0 240 330" aria-hidden="true">
-              <ellipse cx="119" cy="317" rx="88" ry="9" fill="#101435" opacity=".18"/>
-              <path d="M39 319c5-43 19-69 49-82l30-8 31 8c29 11 47 39 53 82Z" fill="#1c2670"/>
+              <ellipse cx="119" cy="317" rx="88" ry="9" fill="#3c352c" opacity=".18"/>
+              <path d="M39 319c5-43 19-69 49-82l30-8 31 8c29 11 47 39 53 82Z" fill="#6a3a2e"/>
               <path d="M49 285l17-18 17 18-17 18Zm59-25 13-14 14 14-14 14Zm54 28 17-18 17 18-17 18Z" fill="#d3234b"/>
               <circle cx="92" cy="280" r="7" fill="#f5b800"/><circle cx="145" cy="302" r="7" fill="#0f8a4f"/>
               <circle cx="188" cy="274" r="6" fill="#f5b800"/><circle cx="105" cy="311" r="5" fill="#0f8a4f"/>
               <path d="M97 216h45v38q-21 17-45 0Z" fill="#75482e"/>
               <path d="M55 250q23-19 48-23l17 20 17-20q28 4 52 23l-22 26-9-13v56H57v-56l-10 13-16-16Z" fill="#f5b800"/>
-              <path d="M61 253q19-16 40-20l19 20 19-20q23 4 42 20l-19 23-10-12v52H71v-52l-10 12-12-13Z" fill="#1c2670"/>
+              <path d="M61 253q19-16 40-20l19 20 19-20q23 4 42 20l-19 23-10-12v52H71v-52l-10 12-12-13Z" fill="#6a3a2e"/>
               <path d="m88 244 9 10-10 10-10-10Zm59 24 9 10-10 10-10-10Zm-45 27 7 8-8 8-8-8Z" fill="#d3234b"/>
               <circle cx="125" cy="241" r="4" fill="#f5b800"/><circle cx="174" cy="250" r="4" fill="#f5b800"/>
               <path d="M104 239q21 19 42 0" fill="none" stroke="#f5b800" stroke-width="4" stroke-linecap="round"/>
@@ -1837,7 +1829,7 @@ onBeforeUnmount(() => {
           rows="3"
           placeholder="Ta phrase apparaîtra ici après la reconnaissance."
         ></textarea>
-        <label class="prompt-label" for="assistant-answer">Réponse de l'assistant en fon</label>
+        <label class="prompt-label prompt-label-dominant" for="assistant-answer">Réponse de l'assistant en fon</label>
         <textarea
           id="assistant-answer"
           v-model="assistantAnswer"
@@ -1857,7 +1849,7 @@ onBeforeUnmount(() => {
             Cette réponse est générée par l'IA, elle n'est pas lue par un humain. Lis-la toi-même à
             voix haute pour qu'elle compte comme une vraie contribution vocale.
           </p>
-          <button class="button button-secondary" type="button" @click="contributeAssistantAnswer">
+          <button class="button" type="button" @click="contributeAssistantAnswer">
             Lire cette réponse à voix haute pour contribuer →
           </button>
         </div>
@@ -1875,7 +1867,7 @@ onBeforeUnmount(() => {
         <span>Histoire</span>
       </button>
       <button
-        class="phone-nav-item"
+        class="phone-nav-item phone-nav-item-dominant"
         :class="{ 'is-active': activeScreen === 'game' && !historyOpen }"
         type="button"
         @click="scrollToContribution"
