@@ -179,6 +179,7 @@ def persist_training_phrase(
     self_reviewed=False,
     content_mode="libre",
     contribution_mode="audio_text",
+    difficulty=None,
 ):
     phrase_dir = DATASET_DIR / "phrase-pairs"
     phrase_dir.mkdir(parents=True, exist_ok=True)
@@ -203,6 +204,7 @@ def persist_training_phrase(
         "contribution_source": contribution_source,
         "domain": contribution_source,
         "content_mode": content_mode,
+        "difficulty": difficulty,
         "review_status": "self-reviewed" if self_reviewed else "unreviewed",
         "mission_id": mission_id,
         "mission_title": mission_title,
@@ -1314,6 +1316,10 @@ async def save_training_phrase_request(request: Request):
         ):
             raise HTTPException(status_code=400, detail="Le titre de domaine est invalide.")
 
+    difficulty = payload.get("difficulty")
+    if difficulty is not None and difficulty not in ("facile", "moyen", "difficile"):
+        raise HTTPException(status_code=400, detail="Le niveau de difficulté est invalide.")
+
     if payload.get("self_reviewed") is not True:
         raise HTTPException(
             status_code=400,
@@ -1348,6 +1354,7 @@ async def save_training_phrase_request(request: Request):
             True,
             content_mode,
             contribution_mode,
+            difficulty,
         )
     except Exception as error:
         LOGGER.exception("Could not save a consented Fon phrase pair")

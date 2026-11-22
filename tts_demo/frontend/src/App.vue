@@ -38,16 +38,23 @@ interface Domain {
   id: string;
   label: string;
   icon: string;
+  image?: string;
   mode: "histoire" | "phrases";
   story?: DomainStory;
   items: DomainItem[];
 }
+
+// Dynamic bindings (not a static `src="..."` attribute) so Vue's compile-time
+// asset-url transform doesn't try to resolve these /game-assets/ public paths
+// as local module imports.
+const homeHeroImage = "/game-assets/images/home-hero.png";
 
 const domains: Domain[] = [
   {
     id: "sante",
     label: "Santé",
     icon: "✚",
+    image: "/game-assets/images/domains/sante.png",
     mode: "histoire",
     story: {
       kicker: "Un centre de santé de quartier",
@@ -56,16 +63,24 @@ const domains: Domain[] = [
         "L'agent de santé reçoit les habitants du quartier dès le matin. Aujourd'hui, une mère est venue avec son enfant qui tousse depuis plusieurs jours.",
     },
     items: [
+      { text: "la fièvre", kind: "mot" },
+      { text: "le médicament", kind: "mot" },
       { text: "Bonjour, qu'est-ce qui vous amène aujourd'hui ?", kind: "phrase" },
       { text: "Avez-vous de la fièvre depuis combien de jours ?", kind: "phrase" },
       { text: "Buvez beaucoup d'eau et reposez-vous.", kind: "phrase" },
       { text: "N'oubliez pas de revenir si ça ne va pas mieux.", kind: "phrase" },
+      {
+        text:
+          "L'agent de santé explique calmement que la fièvre peut avoir plusieurs causes, qu'il faut surveiller la température chaque soir et revenir si elle ne baisse pas après trois jours de repos.",
+        kind: "paragraphe",
+      },
     ],
   },
   {
     id: "education",
     label: "Éducation",
     icon: "✎",
+    image: "/game-assets/images/domains/education.png",
     mode: "histoire",
     story: {
       kicker: "Une salle de classe de village",
@@ -74,16 +89,24 @@ const domains: Domain[] = [
         "C'est le premier jour de classe après les vacances. L'instituteur accueille les élèves devant l'école, certains reviennent de loin pour cette rentrée.",
     },
     items: [
+      { text: "le cahier", kind: "mot" },
+      { text: "la leçon", kind: "mot" },
       { text: "Ouvrez vos cahiers à la page dix.", kind: "phrase" },
       { text: "Qui peut me dire la capitale du Bénin ?", kind: "phrase" },
       { text: "Le travail que tu as fait est très bien.", kind: "phrase" },
       { text: "N'oublie pas d'apporter ton livre demain.", kind: "phrase" },
+      {
+        text:
+          "L'instituteur rappelle que chaque élève doit relire sa leçon le soir, et que ceux qui ont des difficultés peuvent rester après la classe pour qu'on reprenne ensemble les parties mal comprises.",
+        kind: "paragraphe",
+      },
     ],
   },
   {
     id: "religion_traditions",
     label: "Religion & traditions",
     icon: "◆",
+    image: "/game-assets/images/domains/religion_traditions.png",
     mode: "histoire",
     story: {
       kicker: "Une cérémonie saisonnière",
@@ -92,10 +115,17 @@ const domains: Domain[] = [
         "Une fois par saison, les familles du village se réunissent autour des anciens pour une cérémonie transmise depuis des générations.",
     },
     items: [
+      { text: "la cérémonie", kind: "mot" },
+      { text: "les anciens", kind: "mot" },
       { text: "Les anciens nous ont transmis cette histoire.", kind: "phrase" },
       { text: "Chaque saison, le village se réunit ici.", kind: "phrase" },
       { text: "Respecte la terre de tes ancêtres.", kind: "phrase" },
       { text: "Cette fête rassemble toute la famille.", kind: "phrase" },
+      {
+        text:
+          "Chaque saison, les familles se rassemblent autour des anciens pour écouter les récits transmis de génération en génération, et personne ne quitte la cérémonie avant que le dernier chant ne soit terminé.",
+        kind: "paragraphe",
+      },
     ],
   },
   {
@@ -166,6 +196,22 @@ const selectedDomain = computed(
 const selectedItem = ref<DomainItem | null>(null);
 const domainStoryAcknowledged = ref(false);
 const itemFinished = ref(false);
+
+// --- Difficulty levels: derived from each item's existing kind classification,
+// not a separate scoring system. Kept as a plain ref so switching domains
+// preserves the player's last-picked level for the session. ---
+type Difficulty = "facile" | "moyen" | "difficile";
+const difficultyLevel = ref<Difficulty>("moyen");
+const difficultyLabels: Record<Difficulty, string> = { facile: "Facile", moyen: "Moyen", difficile: "Difficile" };
+const kindToDifficulty: Record<DomainItem["kind"], Difficulty> = {
+  mot: "facile",
+  phrase: "moyen",
+  paragraphe: "difficile",
+};
+const filteredDomainItems = computed(() => {
+  if (!selectedDomain.value) return [];
+  return selectedDomain.value.items.filter((item) => kindToDifficulty[item.kind] === difficultyLevel.value);
+});
 
 interface OnboardingSlide {
   title: string;
@@ -676,6 +722,10 @@ async function saveContribution() {
         content_mode: contentMode,
         mission_id: contributionMode.value === "domain" ? selectedDomain.value?.id ?? null : null,
         mission_title: contributionMode.value === "domain" ? selectedDomain.value?.label ?? null : null,
+        difficulty:
+          contributionMode.value === "domain" && selectedItem.value
+            ? kindToDifficulty[selectedItem.value.kind]
+            : null,
         french_text: contributionFrench.value.trim(),
         fon_text: isAudioOnlyMode.value ? "" : contributionFon.value.trim(),
         contribution_mode: contributionModeChoice.value,
@@ -1356,6 +1406,7 @@ onBeforeUnmount(() => {
         </span>
       </div>
       <section class="welcome-hero">
+        <img :src="homeHeroImage" alt="" aria-hidden="true" class="welcome-hero-image" />
         <span class="eyebrow">Une aventure à travers le Bénin</span>
         <h1 class="dominant">Fais entendre ta voix.</h1>
         <p>
@@ -1437,7 +1488,8 @@ onBeforeUnmount(() => {
             role="listitem"
             @click="selectDomainCard(domain)"
           >
-            <span class="domain-card-icon" aria-hidden="true">{{ domain.icon }}</span>
+            <img v-if="domain.image" :src="domain.image" :alt="''" aria-hidden="true" class="domain-card-image" />
+            <span v-else class="domain-card-icon" aria-hidden="true">{{ domain.icon }}</span>
             <span class="domain-card-label">{{ domain.label }}</span>
             <span class="domain-card-mode">{{ domain.mode === "histoire" ? "Avec une histoire" : "Mots et phrases" }}</span>
           </button>
@@ -1522,9 +1574,22 @@ onBeforeUnmount(() => {
           <span class="prompt-label">
             {{ selectedDomain.mode === "histoire" ? "Quelle annonce aimerais-tu proposer en fon ?" : "Choisis un élément à traduire" }}
           </span>
-          <div class="choices">
+          <div class="difficulty-picker" role="group" aria-label="Niveau de difficulté">
             <button
-              v-for="(item, index) in selectedDomain.items"
+              v-for="level in (['facile', 'moyen', 'difficile'] as const)"
+              :key="level"
+              type="button"
+              class="difficulty-chip"
+              :class="{ 'is-selected': difficultyLevel === level }"
+              :aria-pressed="difficultyLevel === level"
+              @click="difficultyLevel = level"
+            >
+              {{ difficultyLabels[level] }}
+            </button>
+          </div>
+          <div v-if="filteredDomainItems.length" class="choices">
+            <button
+              v-for="(item, index) in filteredDomainItems"
               :key="item.text"
               class="choice"
               type="button"
@@ -1538,6 +1603,7 @@ onBeforeUnmount(() => {
               <span class="choice-arrow" aria-hidden="true">↗</span>
             </button>
           </div>
+          <p v-else class="hint">Aucun élément à ce niveau pour ce domaine.</p>
         </div>
       </section>
 
