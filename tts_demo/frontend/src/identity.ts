@@ -1,6 +1,7 @@
 const SPEAKER_ID_KEY = "fonSpeakerId";
 const SPEAKER_LABEL_KEY = "fonSpeakerLabel";
 const ONBOARDING_DONE_KEY = "fonOnboardingDone";
+const CONSENT_GIVEN_KEY = "fonConsentGiven";
 
 export interface SpeakerIdentity {
   speakerId: string;
@@ -27,6 +28,25 @@ export function hasOnboarded(): boolean {
     // Storage unavailable (private mode / blocked): don't gate the app behind
     // onboarding on every single load, just let it through.
     return true;
+  }
+}
+
+// Given once at first launch (onboarding/identify step), covering every
+// contribution made on this device afterwards — no need to re-confirm it on
+// each recording.
+export function hasConsented(): boolean {
+  try {
+    return localStorage.getItem(CONSENT_GIVEN_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+export function saveConsent(): void {
+  try {
+    localStorage.setItem(CONSENT_GIVEN_KEY, "1");
+  } catch {
+    // Storage unavailable: consent stays in-memory for this page load only.
   }
 }
 

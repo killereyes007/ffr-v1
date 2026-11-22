@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { usePwaInstall } from "./pwaInstall";
-import { generateDefaultLabel, getSpeakerIdentity, hasOnboarded, saveIdentity } from "./identity";
+import {
+  generateDefaultLabel,
+  getSpeakerIdentity,
+  hasConsented,
+  hasOnboarded,
+  saveConsent,
+  saveIdentity,
+} from "./identity";
 import { logEvent } from "./analytics";
 
 interface Choice {
@@ -257,6 +264,7 @@ const isLastOnboardingSlide = computed(
   () => onboardingSlideIndex.value === onboardingSlides.length - 1,
 );
 const speakerLabelInput = ref("");
+const onboardingConsent = ref(false);
 
 function nextOnboardingSlide() {
   if (isLastOnboardingSlide.value) {
@@ -274,7 +282,9 @@ function goToIdentify() {
 }
 
 function confirmIdentity() {
+  if (!onboardingConsent.value) return;
   saveIdentity(speakerLabelInput.value);
+  saveConsent();
   logEvent("identify_complete", { speaker_label: speakerLabelInput.value });
   appStage.value = "ready";
 }
@@ -318,7 +328,6 @@ const contributionRecording = ref(false);
 const contributionPlayingAi = ref(false);
 const contributionRecordStatus = ref("Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.");
 const contributionConsent = ref(false);
-const contributionSelfReviewed = ref(false);
 const contributionSaving = ref(false);
 const contributionSaved = ref(false);
 const contributionStatus = ref("");
@@ -332,7 +341,6 @@ const canSaveContribution = computed(
         contributionFon.value.trim() &&
         contributionHumanAudio.value &&
         contributionConsent.value &&
-        contributionSelfReviewed.value &&
         !contributionRecording.value &&
         !contributionSaving.value,
     ),
@@ -410,10 +418,6 @@ function clearContributionRecording() {
 }
 
 watch(contributionFon, clearContributionRecording);
-
-watch(contributionSelfReviewed, (value) => {
-  if (value) logEvent("self_review_checked", { screen: contributionMode.value });
-});
 
 watch(contributionFrench, () => {
   contributionSaved.value = false;
@@ -598,7 +602,6 @@ function setContributionMode(mode: "mission" | "free") {
   contributionMode.value = mode;
   contributionFon.value = "";
   contributionConsent.value = false;
-  contributionSelfReviewed.value = false;
   clearContributionRecording();
   contributionStatus.value = "";
   contributionSaved.value = false;
@@ -612,7 +615,6 @@ function chooseReply(choice: Choice) {
   contributionFrench.value = choice.text;
   contributionFon.value = "";
   contributionConsent.value = false;
-  contributionSelfReviewed.value = false;
   clearContributionRecording();
   setGameStatus(
     "Réplique choisie. Tu peux la traduire et l'enregistrer, ou poursuivre sans contribuer.",
@@ -719,7 +721,6 @@ function nextMission() {
   contributionFrench.value = "";
   contributionFon.value = "";
   contributionConsent.value = false;
-  contributionSelfReviewed.value = false;
   clearContributionRecording();
   setGameStatus("");
   contributionRecordStatus.value = "Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.";
@@ -732,7 +733,6 @@ function restartChapter() {
   contributionFrench.value = "";
   contributionFon.value = "";
   contributionConsent.value = false;
-  contributionSelfReviewed.value = false;
   clearContributionRecording();
   setGameStatus("");
   contributionRecordStatus.value = "Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.";
@@ -1083,7 +1083,6 @@ function contributeAssistantAnswer() {
   contributionFrench.value = assistantAnswerFrench.value.trim();
   contributionFon.value = assistantAnswer.value.trim();
   contributionConsent.value = false;
-  contributionSelfReviewed.value = false;
   clearContributionRecording();
   contributionStatus.value = "";
   contributionSaved.value = false;
@@ -1114,7 +1113,7 @@ onMounted(() => {
     activeScreen.value = "game";
     setContributionMode("free");
   }
-  if (!hasOnboarded()) {
+  if (!hasOnboarded() || !hasConsented()) {
     appStage.value = "onboarding";
     onboardingSlideIndex.value = 0;
     logEvent("onboarding_step_view", { slide_index: 0 });
@@ -1206,8 +1205,20 @@ onBeforeUnmount(() => {
           maxlength="60"
           placeholder="Voix-0000"
         />
+        <label class="consent">
+          <input v-model="onboardingConsent" type="checkbox" />
+          <span>
+            J'ai compris et j'accepte d'y participer : mes enregistrements vocaux et les phrases
+            que je propose en fon serviront à entraîner des modèles de reconnaissance et de
+            synthèse vocale pour le fon, pourront être conservés sur le serveur du prototype et
+            resteront à vérifier par des locuteurs. Cet accord vaut pour toutes mes contributions
+            futures sur cet appareil.
+          </span>
+        </label>
         <div class="onboarding-actions">
-          <button class="button" type="button" @click="confirmIdentity">Continuer</button>
+          <button class="button" type="button" :disabled="!onboardingConsent" @click="confirmIdentity">
+            Continuer
+          </button>
         </div>
       </section>
     </main>
@@ -1781,14 +1792,6 @@ onBeforeUnmount(() => {
             l'amélioration des outils du projet. Je comprends que la contribution restera à
             vérifier. Pour demander sa suppression, je contacterai le responsable du projet.
           </span>
-        </label>
-        <label class="consent">
-          <input
-            v-model="contributionSelfReviewed"
-            type="checkbox"
-            :disabled="contributionRecording || contributionSaving"
-          />
-          <span>Je confirme que cette phrase et cet enregistrement sont corrects.</span>
         </label>
         <p class="hint">
           Aucune donnée n'est envoyée à OpenRouter par ce jeu. N'enregistre pas la voix d'une
