@@ -327,7 +327,6 @@ const contributionAudioUrl = ref<string | null>(null);
 const contributionRecording = ref(false);
 const contributionPlayingAi = ref(false);
 const contributionRecordStatus = ref("Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.");
-const contributionConsent = ref(false);
 const contributionSaving = ref(false);
 const contributionSaved = ref(false);
 const contributionStatus = ref("");
@@ -340,7 +339,6 @@ const canSaveContribution = computed(
       contributionFrench.value.trim() &&
         contributionFon.value.trim() &&
         contributionHumanAudio.value &&
-        contributionConsent.value &&
         !contributionRecording.value &&
         !contributionSaving.value,
     ),
@@ -601,7 +599,6 @@ function setContributionMode(mode: "mission" | "free") {
   if (contributionMode.value === mode) return;
   contributionMode.value = mode;
   contributionFon.value = "";
-  contributionConsent.value = false;
   clearContributionRecording();
   contributionStatus.value = "";
   contributionSaved.value = false;
@@ -614,7 +611,6 @@ function chooseReply(choice: Choice) {
   missionFinished.value = false;
   contributionFrench.value = choice.text;
   contributionFon.value = "";
-  contributionConsent.value = false;
   clearContributionRecording();
   setGameStatus(
     "Réplique choisie. Tu peux la traduire et l'enregistrer, ou poursuivre sans contribuer.",
@@ -720,7 +716,6 @@ function nextMission() {
   missionFinished.value = false;
   contributionFrench.value = "";
   contributionFon.value = "";
-  contributionConsent.value = false;
   clearContributionRecording();
   setGameStatus("");
   contributionRecordStatus.value = "Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.";
@@ -732,7 +727,6 @@ function restartChapter() {
   missionFinished.value = false;
   contributionFrench.value = "";
   contributionFon.value = "";
-  contributionConsent.value = false;
   clearContributionRecording();
   setGameStatus("");
   contributionRecordStatus.value = "Lis ta phrase à voix haute (obligatoire), 30 secondes maximum.";
@@ -1082,7 +1076,6 @@ function contributeAssistantAnswer() {
   contributionMode.value = "free";
   contributionFrench.value = assistantAnswerFrench.value.trim();
   contributionFon.value = assistantAnswer.value.trim();
-  contributionConsent.value = false;
   clearContributionRecording();
   contributionStatus.value = "";
   contributionSaved.value = false;
@@ -1208,10 +1201,12 @@ onBeforeUnmount(() => {
         <label class="consent">
           <input v-model="onboardingConsent" type="checkbox" />
           <span>
-            J'ai compris et j'accepte d'y participer : mes enregistrements vocaux et les phrases
-            que je propose en fon serviront à entraîner des modèles de reconnaissance et de
-            synthèse vocale pour le fon, pourront être conservés sur le serveur du prototype et
-            resteront à vérifier par des locuteurs. Cet accord vaut pour toutes mes contributions
+            Je suis majeur·e. J'ai compris et j'accepte d'y participer : mes enregistrements
+            vocaux et les phrases que je propose en fon serviront à entraîner des modèles de
+            reconnaissance et de synthèse vocale pour le fon, pourront être conservés sur le
+            serveur du prototype et resteront à vérifier par des locuteurs. Je n'enregistrerai
+            que ma propre voix. Pour demander la suppression de mes contributions, je
+            contacterai le responsable du projet. Cet accord vaut pour toutes mes contributions
             futures sur cet appareil.
           </span>
         </label>
@@ -1783,16 +1778,6 @@ onBeforeUnmount(() => {
           controls
           aria-label="Écouter mon enregistrement"
         ></audio>
-        <label class="consent">
-          <input v-model="contributionConsent" type="checkbox" :disabled="contributionRecording || contributionSaving" />
-          <span>
-            Je suis majeur·e, je maîtrise suffisamment le fon pour proposer cette phrase et
-            j'enregistre uniquement ma voix. J'autorise la conservation de ce texte et de cet
-            enregistrement sur le serveur qui héberge le prototype, pour l'évaluation et
-            l'amélioration des outils du projet. Je comprends que la contribution restera à
-            vérifier. Pour demander sa suppression, je contacterai le responsable du projet.
-          </span>
-        </label>
         <p class="hint">
           Aucune donnée n'est envoyée à OpenRouter par ce jeu. N'enregistre pas la voix d'une
           autre personne. Un enregistrement de ta voix est obligatoire pour que cette
