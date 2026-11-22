@@ -269,6 +269,52 @@ const gameStatusType = ref<"info" | "error" | "success">("info");
 const savedContributions = ref(0);
 const clock = ref("");
 
+// --- Fon special-character toolbar (shared by the writing-check textarea and
+// the "Ta traduction en fon" field) : inserts at the cursor position of the
+// last-focused fon-capable textarea, never a full replacement keyboard. ---
+
+const fonSpecialLetters = ["Ɖ", "ɖ", "Ɛ", "ɛ", "Ɔ", "ɔ"];
+const fonBaseVowels = ["a", "e", "ɛ", "i", "o", "ɔ", "u"];
+const fonToneMap: Record<string, string[]> = {
+  a: ["á", "à", "ǎ", "â", "ā"],
+  e: ["é", "è", "ě", "ê", "ē"],
+  i: ["í", "ì", "ǐ", "î", "ī"],
+  o: ["ó", "ò", "ǒ", "ô", "ō"],
+  u: ["ú", "ù", "ǔ", "û", "ū"],
+  "ɛ": ["ɛ́", "ɛ̀", "ɛ̌", "ɛ̂", "ɛ̄"],
+  "ɔ": ["ɔ́", "ɔ̀", "ɔ̌", "ɔ̂", "ɔ̄"],
+};
+
+const focusedFonInput = ref<HTMLTextAreaElement | null>(null);
+const openTonePicker = ref<string | null>(null);
+
+function trackFonInputFocus(event: FocusEvent) {
+  focusedFonInput.value = event.target as HTMLTextAreaElement;
+}
+
+function toggleTonePicker(vowel: string) {
+  openTonePicker.value = openTonePicker.value === vowel ? null : vowel;
+}
+
+function insertFonChar(char: string) {
+  const el = focusedFonInput.value;
+  if (!el) return;
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  const newValue = el.value.slice(0, start) + char + el.value.slice(end);
+  if (el.id === "contribution-fon") {
+    contributionFon.value = newValue;
+  } else if (el.id === "writing-check-input") {
+    writingCheckInput.value = newValue;
+  }
+  const newCursor = start + char.length;
+  openTonePicker.value = null;
+  void nextTick(() => {
+    el.focus();
+    el.setSelectionRange(newCursor, newCursor);
+  });
+}
+
 // --- Contribution zone shared by "Phrase proposée" (mission) and "Ma phrase" (free) modes ---
 
 const contributionFrench = ref("");
@@ -1182,12 +1228,47 @@ onBeforeUnmount(() => {
         <span class="prompt-label">Essaie d'écrire une traduction</span>
         <p class="locked-text">{{ writingCheckSample }}</p>
         <label class="prompt-label" for="writing-check-input">Essaie d'écrire ta traduction en fon</label>
+        <div class="fon-keyboard" role="group" aria-label="Caractères spéciaux du fon">
+          <div class="fon-keyboard-row">
+            <button
+              v-for="letter in fonSpecialLetters"
+              :key="'letter-' + letter"
+              type="button"
+              class="fon-key"
+              @mousedown.prevent
+              @click="insertFonChar(letter)"
+            >{{ letter }}</button>
+          </div>
+          <div class="fon-keyboard-row">
+            <div v-for="vowel in fonBaseVowels" :key="'vowel-' + vowel" class="fon-vowel-wrap">
+              <button
+                type="button"
+                class="fon-key"
+                :class="{ 'is-open': openTonePicker === vowel }"
+                @mousedown.prevent
+                @click="toggleTonePicker(vowel)"
+              >{{ vowel }}</button>
+              <div v-if="openTonePicker === vowel" class="fon-tone-drawer">
+                <button type="button" class="fon-key fon-key-tone" @mousedown.prevent @click="insertFonChar(vowel)">{{ vowel }}</button>
+                <button
+                  v-for="tone in fonToneMap[vowel]"
+                  :key="tone"
+                  type="button"
+                  class="fon-key fon-key-tone"
+                  @mousedown.prevent
+                  @click="insertFonChar(tone)"
+                >{{ tone }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <textarea
           id="writing-check-input"
           v-model="writingCheckInput"
           rows="2"
           maxlength="200"
           placeholder="Essaie, même si tu n'es pas sûr·e…"
+          @focus="trackFonInputFocus"
         ></textarea>
         <p class="hint">
           Ceci n'est pas noté ni corrigé automatiquement — personne ne vérifie l'orthographe,
@@ -1529,6 +1610,40 @@ onBeforeUnmount(() => {
 
         <template v-if="!isAudioOnlyMode">
           <label class="prompt-label prompt-label-dominant" for="contribution-fon">Ta traduction en fon</label>
+          <div class="fon-keyboard" role="group" aria-label="Caractères spéciaux du fon">
+            <div class="fon-keyboard-row">
+              <button
+                v-for="letter in fonSpecialLetters"
+                :key="'letter-' + letter"
+                type="button"
+                class="fon-key"
+                @mousedown.prevent
+                @click="insertFonChar(letter)"
+              >{{ letter }}</button>
+            </div>
+            <div class="fon-keyboard-row">
+              <div v-for="vowel in fonBaseVowels" :key="'vowel-' + vowel" class="fon-vowel-wrap">
+                <button
+                  type="button"
+                  class="fon-key"
+                  :class="{ 'is-open': openTonePicker === vowel }"
+                  @mousedown.prevent
+                  @click="toggleTonePicker(vowel)"
+                >{{ vowel }}</button>
+                <div v-if="openTonePicker === vowel" class="fon-tone-drawer">
+                  <button type="button" class="fon-key fon-key-tone" @mousedown.prevent @click="insertFonChar(vowel)">{{ vowel }}</button>
+                  <button
+                    v-for="tone in fonToneMap[vowel]"
+                    :key="tone"
+                    type="button"
+                    class="fon-key fon-key-tone"
+                    @mousedown.prevent
+                    @click="insertFonChar(tone)"
+                  >{{ tone }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
           <textarea
             id="contribution-fon"
             v-model="contributionFon"
@@ -1536,6 +1651,7 @@ onBeforeUnmount(() => {
             maxlength="500"
             placeholder="Écris la phrase telle que tu la prononceras…"
             :disabled="contributionRecording || contributionSaving"
+            @focus="trackFonInputFocus"
           ></textarea>
         </template>
         <p v-else class="hint">

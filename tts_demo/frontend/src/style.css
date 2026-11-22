@@ -1766,3 +1766,75 @@ audio {
   border-color: var(--ink-settled);
   box-shadow: 0 0 0 3px var(--line);
 }
+
+/*
+  Fon special-character toolbar: a functional UI element, not hierarchy
+  content, so it uses the "settled" step for its keys and the green accent
+  (never the signal-hue) for the open/active tone drawer.
+*/
+.fon-keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.fon-keyboard-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fon-vowel-wrap {
+  position: relative;
+}
+
+.fon-key {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--ink-settled);
+  font-family: "JostVF", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.fon-key:hover {
+  border-color: var(--line-strong);
+  background: var(--ground);
+}
+
+.fon-key.is-open {
+  border-color: var(--accent-green);
+  background: var(--accent-green-dim);
+  color: var(--ink-signal);
+}
+
+.fon-tone-drawer {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px;
+  border: 1px solid var(--accent-green);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.fon-key-tone {
+  min-width: 36px;
+  min-height: 36px;
+}
