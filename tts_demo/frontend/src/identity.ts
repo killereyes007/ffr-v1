@@ -2,6 +2,9 @@ const SPEAKER_ID_KEY = "fonSpeakerId";
 const SPEAKER_LABEL_KEY = "fonSpeakerLabel";
 const ONBOARDING_DONE_KEY = "fonOnboardingDone";
 const CONSENT_GIVEN_KEY = "fonConsentGiven";
+const CONTRIBUTION_MODE_KEY = "fonContributionMode";
+
+export type ContributionMode = "audio_only" | "audio_text";
 
 export interface SpeakerIdentity {
   speakerId: string;
@@ -47,6 +50,26 @@ export function saveConsent(): void {
     localStorage.setItem(CONSENT_GIVEN_KEY, "1");
   } catch {
     // Storage unavailable: consent stays in-memory for this page load only.
+  }
+}
+
+// Given once at first launch (writing-check step), right after consent.
+// Absent (e.g. someone who onboarded before this step existed) is treated as
+// "audio_text" by every caller, so this never blocks or re-prompts them.
+export function getContributionMode(): ContributionMode | null {
+  try {
+    const value = localStorage.getItem(CONTRIBUTION_MODE_KEY);
+    return value === "audio_only" || value === "audio_text" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveContributionMode(mode: ContributionMode): void {
+  try {
+    localStorage.setItem(CONTRIBUTION_MODE_KEY, mode);
+  } catch {
+    // Storage unavailable: choice stays in-memory for this page load only.
   }
 }
 

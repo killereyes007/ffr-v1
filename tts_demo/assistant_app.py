@@ -178,11 +178,12 @@ def persist_training_phrase(
     speaker_label=None,
     self_reviewed=False,
     content_mode="libre",
+    contribution_mode="audio_text",
 ):
     phrase_dir = DATASET_DIR / "phrase-pairs"
     phrase_dir.mkdir(parents=True, exist_ok=True)
     sample_id = str(uuid.uuid4())
-    if synthesized_audio is None and generate_synthesis:
+    if synthesized_audio is None and generate_synthesis and fon_text.strip():
         synthesized_audio = base64.b64decode(encode_audio_wav(synthesize(fon_text)))
     # "histoire"/"phrases" domains offer a curated item to translate (same trust
     # level the old "game_mission" source had); "libre" is authored by the
@@ -206,7 +207,9 @@ def persist_training_phrase(
         "mission_id": mission_id,
         "mission_title": mission_title,
         "french_text": french_text,
-        "fon_text": fon_text,
+        "fon_text": fon_text or None,
+        "fon_text_source": "none_audio_only" if not fon_text.strip() else "text_translated",
+        "contribution_mode": contribution_mode,
         "synthesized_audio_file": (
             "fon_synthesized.wav" if synthesized_audio else None
         ),
@@ -1266,14 +1269,22 @@ async def save_training_phrase_request(request: Request):
         )
     french_text = payload.get("french_text")
     fon_text = payload.get("fon_text")
+    contribution_mode = payload.get("contribution_mode") or "audio_text"
+    if contribution_mode not in ("audio_only", "audio_text"):
+        raise HTTPException(status_code=400, detail="Le mode de contribution est invalide.")
     if not isinstance(french_text, str) or not french_text.strip():
         raise HTTPException(status_code=400, detail="La phrase en français est obligatoire.")
     if len(french_text) > 500:
         raise HTTPException(status_code=400, detail="La phrase en français dépasse 500 caractères.")
-    if not isinstance(fon_text, str) or not fon_text.strip():
-        raise HTTPException(status_code=400, detail="La traduction en fon est obligatoire.")
-    if len(fon_text) > 500:
-        raise HTTPException(status_code=400, detail="La traduction en fon dépasse 500 caractères.")
+    if contribution_mode == "audio_only":
+        # The speaker chose to contribute by voice only (common for fluent but
+        # non-literate Fon speakers): no written translation is required or stored.
+        fon_text = ""
+    else:
+        if not isinstance(fon_text, str) or not fon_text.strip():
+            raise HTTPException(status_code=400, detail="La traduction en fon est obligatoire.")
+        if len(fon_text) > 500:
+            raise HTTPException(status_code=400, detail="La traduction en fon dépasse 500 caractères.")
     contribution_source = payload.get("source") or payload.get("domain") or "libre"
     if (
         not isinstance(contribution_source, str)
@@ -1331,11 +1342,12 @@ async def save_training_phrase_request(request: Request):
             contribution_source,
             mission_id.strip() if isinstance(mission_id, str) else None,
             mission_title.strip() if isinstance(mission_title, str) else None,
-            True,
+            bool(fon_text.strip()),
             speaker_id,
             speaker_label,
             True,
             content_mode,
+            contribution_mode,
         )
     except Exception as error:
         LOGGER.exception("Could not save a consented Fon phrase pair")

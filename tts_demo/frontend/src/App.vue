@@ -3,10 +3,12 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { usePwaInstall } from "./pwaInstall";
 import {
   generateDefaultLabel,
+  getContributionMode,
   getSpeakerIdentity,
   hasConsented,
   hasOnboarded,
   saveConsent,
+  saveContributionMode,
   saveIdentity,
 } from "./identity";
 import { logEvent } from "./analytics";
@@ -196,13 +198,17 @@ const onboardingSlides: OnboardingSlide[] = [
   },
 ];
 
-const appStage = ref<"onboarding" | "identify" | "ready">("ready");
+const appStage = ref<"onboarding" | "identify" | "writing-check" | "ready">("ready");
 const onboardingSlideIndex = ref(0);
 const isLastOnboardingSlide = computed(
   () => onboardingSlideIndex.value === onboardingSlides.length - 1,
 );
 const speakerLabelInput = ref("");
 const onboardingConsent = ref(false);
+const writingCheckSample = "Bonjour, comment vas-tu ?";
+const writingCheckInput = ref("");
+const writingCheckNudge = ref(false);
+const contributionModeChoice = ref<"audio_only" | "audio_text">("audio_text");
 
 function nextOnboardingSlide() {
   if (isLastOnboardingSlide.value) {
@@ -224,6 +230,25 @@ function confirmIdentity() {
   saveIdentity(speakerLabelInput.value);
   saveConsent();
   logEvent("identify_complete", { speaker_label: speakerLabelInput.value });
+  appStage.value = "writing-check";
+}
+
+function tryChooseAudioText() {
+  if (writingCheckInput.value.trim().length < 3) {
+    writingCheckNudge.value = true;
+    return;
+  }
+  writingCheckNudge.value = false;
+  contributionModeChoice.value = "audio_text";
+  saveContributionMode("audio_text");
+  logEvent("contribution_mode_chosen", { mode: "audio_text" });
+  appStage.value = "ready";
+}
+
+function chooseAudioOnly() {
+  contributionModeChoice.value = "audio_only";
+  saveContributionMode("audio_only");
+  logEvent("contribution_mode_chosen", { mode: "audio_only" });
   appStage.value = "ready";
 }
 const currentScreenName = computed<string | null>(() => {
@@ -261,11 +286,13 @@ const contributionStatus = ref("");
 const contributionStatusState = ref<"info" | "error" | "success">("info");
 const contributionAiAudioEl = ref<HTMLAudioElement | null>(null);
 
+const isAudioOnlyMode = computed(() => contributionModeChoice.value === "audio_only");
+
 const canSaveContribution = computed(
   () =>
     Boolean(
       contributionFrench.value.trim() &&
-        contributionFon.value.trim() &&
+        (isAudioOnlyMode.value || contributionFon.value.trim()) &&
         contributionHumanAudio.value &&
         !contributionRecording.value &&
         !contributionSaving.value,
@@ -449,7 +476,7 @@ async function finishContributionRecording() {
 }
 
 async function startContributionRecording() {
-  if (!contributionFon.value.trim()) {
+  if (!isAudioOnlyMode.value && !contributionFon.value.trim()) {
     contributionRecordStatus.value = "Écris d'abord la phrase en fon que tu vas lire.";
     return;
   }
@@ -604,7 +631,8 @@ async function saveContribution() {
         mission_id: contributionMode.value === "domain" ? selectedDomain.value?.id ?? null : null,
         mission_title: contributionMode.value === "domain" ? selectedDomain.value?.label ?? null : null,
         french_text: contributionFrench.value.trim(),
-        fon_text: contributionFon.value.trim(),
+        fon_text: isAudioOnlyMode.value ? "" : contributionFon.value.trim(),
+        contribution_mode: contributionModeChoice.value,
         human_audio: contributionHumanAudio.value,
         synthesized_audio: contributionAiAudioBase64.value,
         self_reviewed: true,
@@ -992,7 +1020,7 @@ function contributeAssistantAnswer() {
   activeScreen.value = "game";
   contributionMode.value = "free";
   contributionFrench.value = assistantAnswerFrench.value.trim();
-  contributionFon.value = assistantAnswer.value.trim();
+  contributionFon.value = isAudioOnlyMode.value ? "" : assistantAnswer.value.trim();
   clearContributionRecording();
   contributionStatus.value = "";
   contributionSaved.value = false;
@@ -1027,6 +1055,13 @@ onMounted(() => {
     appStage.value = "onboarding";
     onboardingSlideIndex.value = 0;
     logEvent("onboarding_step_view", { slide_index: 0 });
+  } else {
+    const storedMode = getContributionMode();
+    if (!storedMode) {
+      appStage.value = "writing-check";
+    } else {
+      contributionModeChoice.value = storedMode;
+    }
   }
   if (isIosManualInstall && !installed.value) {
     logEvent("ios_manual_banner_shown");
@@ -1130,6 +1165,43 @@ onBeforeUnmount(() => {
         <div class="onboarding-actions">
           <button class="button" type="button" :disabled="!onboardingConsent" @click="confirmIdentity">
             Continuer
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <main v-else-if="appStage === 'writing-check'" class="onboarding-screen">
+      <section class="card onboarding-card">
+        <span class="eyebrow">Avant de commencer</span>
+        <h1>Comment veux-tu contribuer ?</h1>
+        <p class="story-copy">
+          Le fon se parle avant tout à l'oral. Si tu es plus à l'aise pour parler que pour
+          écrire, tu peux contribuer uniquement avec ta voix — le champ d'écriture ne te sera
+          jamais demandé.
+        </p>
+        <span class="prompt-label">Essaie d'écrire une traduction</span>
+        <p class="locked-text">{{ writingCheckSample }}</p>
+        <label class="prompt-label" for="writing-check-input">Essaie d'écrire ta traduction en fon</label>
+        <textarea
+          id="writing-check-input"
+          v-model="writingCheckInput"
+          rows="2"
+          maxlength="200"
+          placeholder="Essaie, même si tu n'es pas sûr·e…"
+        ></textarea>
+        <p class="hint">
+          Ceci n'est pas noté ni corrigé automatiquement — personne ne vérifie l'orthographe,
+          c'est juste pour t'aider à savoir ce qui te convient le mieux.
+        </p>
+        <p v-if="writingCheckNudge" class="hint" role="status">
+          Essaie d'abord d'écrire quelque chose ci-dessus, même une tentative.
+        </p>
+        <div class="onboarding-actions">
+          <button class="button button-secondary" type="button" @click="chooseAudioOnly">
+            Je préfère parler seulement
+          </button>
+          <button class="button" type="button" @click="tryChooseAudioText">
+            Je préfère parler et écrire
           </button>
         </div>
       </section>
@@ -1453,17 +1525,24 @@ onBeforeUnmount(() => {
           ></textarea>
         </template>
 
-        <label class="prompt-label prompt-label-dominant" for="contribution-fon">Ta traduction en fon</label>
-        <textarea
-          id="contribution-fon"
-          v-model="contributionFon"
-          rows="3"
-          maxlength="500"
-          placeholder="Écris la phrase telle que tu la prononceras…"
-          :disabled="contributionRecording || contributionSaving"
-        ></textarea>
+        <template v-if="!isAudioOnlyMode">
+          <label class="prompt-label prompt-label-dominant" for="contribution-fon">Ta traduction en fon</label>
+          <textarea
+            id="contribution-fon"
+            v-model="contributionFon"
+            rows="3"
+            maxlength="500"
+            placeholder="Écris la phrase telle que tu la prononceras…"
+            :disabled="contributionRecording || contributionSaving"
+          ></textarea>
+        </template>
+        <p v-else class="hint">
+          Tu as choisi de contribuer uniquement à l'oral : lis la phrase à voix haute, aucune
+          traduction écrite ne te sera demandée.
+        </p>
         <div class="record-row">
           <button
+            v-if="!isAudioOnlyMode"
             class="button button-secondary"
             type="button"
             :disabled="contributionPlayingAi"
