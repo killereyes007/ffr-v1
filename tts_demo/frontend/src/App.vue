@@ -11,18 +11,6 @@ import {
 } from "./identity";
 import { logEvent } from "./analytics";
 
-interface HistorySource {
-  label: string;
-  url: string;
-}
-
-interface HistoryNote {
-  period: string;
-  title: string;
-  summary: string;
-  sources: HistorySource[];
-}
-
 interface AudioCapture {
   stream: MediaStream;
   context: AudioContext;
@@ -166,92 +154,6 @@ const domains: Domain[] = [
   },
 ];
 
-const historyNotes: HistoryNote[] = [
-  {
-    period: "Avant le XVIIe siècle",
-    title: "Des histoires régionales, pas un seul royaume",
-    summary:
-      "Avant la colonisation, le territoire du Bénin actuel rassemblait plusieurs sociétés et pouvoirs. Au sud se trouvaient notamment Allada, Ouidah et Porto-Novo ; au nord, le royaume bariba de Nikki. Le royaume du Dahomey ne représente donc pas à lui seul toute l'histoire de ce territoire.",
-    sources: [
-      {
-        label: "Encyclopaedia Britannica · Benin: History",
-        url: "https://www.britannica.com/place/Benin/History",
-      },
-    ],
-  },
-  {
-    period: "À partir du XVIIe siècle",
-    title: "Le royaume du Dahomey et Abomey",
-    summary:
-      "Le royaume du Dahomey se développe au sud, autour d'Abomey, dans une histoire étroitement liée aux Fon. Les dates de fondation varient selon les sources et les traditions : mieux vaut parler d'un développement à partir du milieu du XVIIe siècle que d'une année certaine.",
-    sources: [
-      {
-        label: "UNESCO · Palais royaux d'Abomey",
-        url: "https://whc.unesco.org/en/list/323/",
-      },
-      {
-        label: "Encyclopaedia Britannica · Kingdom of Dahomey",
-        url: "https://www.britannica.com/place/Dahomey-historical-kingdom-Africa",
-      },
-    ],
-  },
-  {
-    period: "1724–1727 et siècles suivants",
-    title: "Ouidah, commerce atlantique et mémoire",
-    summary:
-      "Le roi Agaja étend le pouvoir du Dahomey vers Allada en 1724, puis Ouidah en 1727. Le royaume s'enrichit ensuite de la vente de personnes réduites en esclavage à des négociants européens. La traite transatlantique mobilise des acteurs aux rôles et pouvoirs différents ; au cœur de cette histoire se trouvent les personnes capturées, leurs familles et leurs descendants. Ce n'est pas un défi de jeu.",
-    sources: [
-      {
-        label: "Encyclopaedia Britannica · Ouidah",
-        url: "https://www.britannica.com/place/Ouidah",
-      },
-      {
-        label: "Encyclopaedia Britannica · Benin: History",
-        url: "https://www.britannica.com/place/Benin/History",
-      },
-    ],
-  },
-  {
-    period: "1892–1899",
-    title: "Conquête française et période coloniale",
-    summary:
-      "La France mène la conquête du Dahomey entre 1892 et 1894. Le territoire colonial est ensuite intégré à l'Afrique-Occidentale française. Les frontières et l'État du Bénin actuel ne sont pas simplement la continuation d'un ancien royaume.",
-    sources: [
-      {
-        label: "Encyclopaedia Britannica · Benin: History",
-        url: "https://www.britannica.com/place/Benin/History",
-      },
-    ],
-  },
-  {
-    period: "1960–aujourd'hui",
-    title: "Indépendance et République du Bénin",
-    summary:
-      "Le Dahomey devient indépendant en 1960. Le pays prend le nom de Bénin en 1975 ; après le changement de régime de 1990, il devient la République du Bénin. Aujourd'hui, le fon est une langue vivante parmi les langues du pays ; le fon, l'éwé et les autres langues ne sont pas interchangeables.",
-    sources: [
-      {
-        label: "Encyclopaedia Britannica · Benin",
-        url: "https://www.britannica.com/place/Benin",
-      },
-      {
-        label: "Encyclopaedia Britannica · Fon people",
-        url: "https://www.britannica.com/topic/Fon-people",
-      },
-    ],
-  },
-  {
-    period: "Des héritages qui ne se confondent pas",
-    title: "Une tradition a sa communauté et son contexte",
-    summary:
-      "Le patrimoine du Bénin ne se résume pas à une culture unique. Par exemple, l'UNESCO attribue le patrimoine oral du Gelede aux communautés Yoruba-Nago du Bénin, du Nigeria et du Togo : ce n'est pas un contenu Fon générique. Le jeu ne l'utilise donc pas comme décor ou comme quête.",
-    sources: [
-      {
-        label: "UNESCO · Patrimoine oral du Gelede",
-        url: "https://ich.unesco.org/en/RL/oral-heritage-of-gelede-00002",
-      },
-    ],
-  },
-];
 
 const activeScreen = ref<"home" | "game" | "assistant">("game");
 const contributionMode = ref<"domain" | "free">("domain");
@@ -324,11 +226,9 @@ function confirmIdentity() {
   logEvent("identify_complete", { speaker_label: speakerLabelInput.value });
   appStage.value = "ready";
 }
-const historyOpen = ref(false);
-
 const currentScreenName = computed<string | null>(() => {
   if (appStage.value !== "ready") return null;
-  if (activeScreen.value === "game") return historyOpen.value ? "histoire" : "ma_voix";
+  if (activeScreen.value === "game") return "ma_voix";
   return activeScreen.value;
 });
 
@@ -397,25 +297,12 @@ function openDomainSelector() {
   });
 }
 
-function openHistoryNotebook() {
-  activeScreen.value = "game";
-  contributionMode.value = "domain";
-  historyOpen.value = true;
-  void nextTick(() => {
-    document.querySelector("#history-notebook")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  });
-}
-
 function scrollToContribution() {
   openDomainSelector();
 }
 
 function showHome() {
   activeScreen.value = "home";
-  historyOpen.value = false;
   void nextTick(() => {
     document.querySelector(".shell main")?.scrollTo({ top: 0 });
   });
@@ -1341,14 +1228,6 @@ onBeforeUnmount(() => {
           <b>Lancer l'aventure <span aria-hidden="true">→</span></b>
         </span>
       </button>
-      <button class="welcome-action" type="button" @click="openHistoryNotebook">
-        <span class="welcome-action-icon" aria-hidden="true">▤</span>
-        <span class="welcome-action-copy">
-          <strong>Découvrir l'histoire du Bénin</strong>
-          <small>Consulte les six repères historiques et leurs sources.</small>
-          <b>Ouvrir le carnet <span aria-hidden="true">→</span></b>
-        </span>
-      </button>
       <button class="welcome-action" type="button" @click="scrollToContribution">
         <span class="welcome-action-icon" aria-hidden="true">◉</span>
         <span class="welcome-action-copy">
@@ -1394,50 +1273,6 @@ onBeforeUnmount(() => {
           Chaque domaine propose des mots et des phrases du quotidien à traduire en fon, avec
           ou sans histoire pour les présenter — ou propose librement ta propre phrase.
         </p>
-        <button
-          class="history-toggle"
-          type="button"
-          :aria-expanded="historyOpen"
-          aria-controls="history-notebook"
-          @click="historyOpen = !historyOpen"
-        >
-          <span aria-hidden="true">▤</span>
-          {{ historyOpen ? "Refermer le carnet historique" : "Ouvrir le carnet historique" }}
-          <span class="history-toggle-count">6 repères</span>
-        </button>
-        <section v-if="historyOpen" id="history-notebook" class="history-notebook" aria-label="Repères historiques du Bénin">
-          <div class="history-notebook-heading">
-            <span class="eyebrow">Lire avant de jouer</span>
-            <h2>Une histoire, plusieurs territoires et plusieurs voix</h2>
-            <p>
-              Ce survol n'est pas une histoire complète. Ces repères ont des
-              sources consultables ; ils ne remplacent ni les historiens
-              béninois ni les récits des communautés.
-            </p>
-          </div>
-          <article v-for="note in historyNotes" :key="note.title" class="history-note">
-            <span class="history-period">{{ note.period }}</span>
-            <h3>{{ note.title }}</h3>
-            <p>{{ note.summary }}</p>
-            <div class="history-sources" aria-label="Sources">
-              <a
-                v-for="source in note.sources"
-                :key="source.url"
-                :href="source.url"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {{ source.label }} ↗
-              </a>
-            </div>
-          </article>
-          <p class="history-editorial-note">
-            Le jeu n'utilise pas de chants, proverbes, récits familiaux ou
-            pratiques religieuses comme énigmes ou récompenses. Ces contenus
-            demandent le contexte, l'accord et la validation des personnes
-            concernées.
-          </p>
-        </section>
         <div class="domain-grid" role="list" aria-label="Domaines à explorer">
           <button
             v-for="domain in domains"
@@ -1858,31 +1693,13 @@ onBeforeUnmount(() => {
 
     <nav class="phone-nav" aria-label="Navigation du jeu">
       <button
-        class="phone-nav-item"
-        :class="{ 'is-active': activeScreen === 'game' && historyOpen }"
-        type="button"
-        @click="openHistoryNotebook"
-      >
-        <span aria-hidden="true">◇</span>
-        <span>Histoire</span>
-      </button>
-      <button
         class="phone-nav-item phone-nav-item-dominant"
-        :class="{ 'is-active': activeScreen === 'game' && !historyOpen }"
+        :class="{ 'is-active': activeScreen === 'game' }"
         type="button"
         @click="scrollToContribution"
       >
         <span aria-hidden="true">◉</span>
         <span>Ma voix</span>
-      </button>
-      <button
-        class="phone-nav-item"
-        :class="{ 'is-active': activeScreen === 'assistant' }"
-        type="button"
-        @click="activeScreen = 'assistant'"
-      >
-        <span aria-hidden="true">◈</span>
-        <span>Assistant</span>
       </button>
       <button
         class="phone-nav-item"
@@ -1892,6 +1709,15 @@ onBeforeUnmount(() => {
       >
         <span aria-hidden="true">⌂</span>
         <span>Accueil</span>
+      </button>
+      <button
+        class="phone-nav-item"
+        :class="{ 'is-active': activeScreen === 'assistant' }"
+        type="button"
+        @click="activeScreen = 'assistant'"
+      >
+        <span aria-hidden="true">◈</span>
+        <span>Assistant</span>
       </button>
     </nav>
     </template>
