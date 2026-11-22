@@ -1,56 +1,110 @@
 /*
-  Direction A (locked Round 1, batch 2 — see /ROUND-2-CONTEXT.md at the project root):
-  tuning a radio dial. One typeface (Jost, variable), one hue (Bénin flag yellow
-  #FCD116) on a near-black, green-tinted ground. Meaning is carried entirely by a
-  weight/tracking/case/opacity sweep from "static" (weak signal) to "signal"
-  (resolved), never by a second color in that hierarchy. Four reusable steps:
-  static / tuning / settled / signal. Bénin's flag green and red appear only as
-  rare, separate functional/decorative accents (domain-card chips, status
-  colors) — never substituting for the hierarchy hue.
-  Self-hosted OFL font — no Google Fonts, no CDN.
+  "Terre & Mémoire" — complete, externally supplied art direction (see
+  /ROUND-2-CONTEXT.md at the project root for the full brief). Replaces the
+  previous "Direction A" (Jost variable weight-sweep on a near-black canvas)
+  entirely. A light, warm, editorial system: Fraunces for headings/identity,
+  DM Sans for body/UI, an earth-tone palette (terre cuite, ocre doré, brun
+  mémoire, vert végétal) on ivory/cream surfaces. Self-hosted OFL fonts —
+  no Google Fonts CDN, no CDN of any kind.
 */
+
 @font-face {
-  font-family: "JostVF";
-  src: url("/game-assets/fonts/jost/Jost-VF.ttf") format("truetype-variations");
+  font-family: "Fraunces";
+  src: url("/game-assets/fonts/fraunces/Fraunces-VF-latin-basic.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("/game-assets/fonts/fraunces/Fraunces-VF-latin-ext.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("/game-assets/fonts/fraunces/Fraunces-Italic-VF-latin-basic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("/game-assets/fonts/fraunces/Fraunces-Italic-VF-latin-ext.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "DM Sans";
+  src: url("/game-assets/fonts/dm-sans/DMSans-VF.ttf") format("truetype-variations");
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DM Sans";
+  src: url("/game-assets/fonts/dm-sans/DMSans-Italic-VF.ttf") format("truetype-variations");
+  font-weight: 100 1000;
+  font-style: italic;
   font-display: swap;
 }
 
 :root {
-  color-scheme: dark;
-  font-family: "JostVF", sans-serif;
-  background: #0d1410;
-  color: rgba(252, 209, 22, 0.85);
-  font-synthesis: none;
+  color-scheme: light;
+  font-family: "DM Sans", sans-serif;
+  font-optical-sizing: auto;
+  background: #FAF5EC;
+  color: #2B241F;
   text-rendering: optimizeLegibility;
 
-  /* canvas — near-black, green-tinted (Bénin green undertone) */
-  --ground: #0d1410;
-  --surface-raised: #17211b;
-  --surface-sunken: #080c09;
-  --line: rgba(252, 209, 22, 0.14);
-  --line-strong: rgba(252, 209, 22, 0.28);
+  /* Backgrounds */
+  --color-bg: #FAF5EC;
+  --color-bg-secondary: #F5EBDD;
+  --color-surface: #FFFDF8;
+  --color-card: #F0E5D5;
+  --color-selected: #F5E8C9;
 
-  /* the one hue (Bénin flag yellow), at the four step opacities */
-  --signal-hue: #fcd116;
-  --ink-static: rgba(252, 209, 22, 0.35);
-  --ink-tuning: rgba(252, 209, 22, 0.65);
-  --ink-settled: rgba(252, 209, 22, 0.85);
-  --ink-signal: #fcd116;
-  --ink-signal-dim: rgba(252, 209, 22, 0.14);
+  /* Brand */
+  --color-primary: #A9472D;
+  --color-primary-hover: #873A27;
+  --color-primary-disabled: #D5A99A;
+  --color-accent: #D5A044;
+  --color-accent-light: #F5E8C9;
 
-  /* functional UI state (outside the weight-sweep hierarchy, kept rare) —
-     tied to the Bénin flag's red and green rather than generic traffic colors */
-  --status-error: #e8112d;
-  --status-error-dim: rgba(232, 17, 45, 0.12);
-  --status-success: #35a870;
-  --status-success-dim: rgba(53, 168, 112, 0.12);
+  /* Typography */
+  --color-heading: #38251D;
+  --color-text: #2B241F;
+  --color-text-secondary: #75685B;
+  --color-text-muted: #9B8B79;
 
-  /* decorative accent surfaces (icon chips, badges) — authentic Bénin green,
-     never used for the weight-sweep text hierarchy */
-  --accent-green: #008751;
-  --accent-green-dim: rgba(0, 135, 81, 0.22);
+  /* Borders */
+  --color-border: #E2D5C4;
+  --color-border-active: #A9472D;
+
+  /* Semantic */
+  --color-success: #426348;
+  --color-success-bg: #E6EEE3;
+  --color-warning: #A56B17;
+  --color-error: #B64035;
+  --color-info: #496B78;
+
+  /* Typography */
+  --font-heading: "Fraunces", serif;
+  --font-body: "DM Sans", sans-serif;
+
+  /* Radius */
+  --radius-card: 20px;
+  --radius-button: 12px;
+  --radius-input: 12px;
+
+  /* Shadows */
+  --shadow-card: 0 3px 12px rgba(56, 37, 29, 0.06);
 }
 
 * {
@@ -71,7 +125,7 @@ body {
   margin: 0;
   padding: 20px 14px;
   place-items: center;
-  background: var(--surface-sunken);
+  background: var(--color-bg-secondary);
 }
 
 button,
@@ -103,13 +157,13 @@ a {
   flex-direction: column;
   overflow: hidden;
   padding: 8px 18px 0;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--color-border);
   border-radius: 38px;
-  background: var(--ground);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  background: var(--color-bg);
+  box-shadow: 0 24px 60px rgba(56, 37, 29, 0.18);
 }
 
-/* --- Static step: eyebrows, meta/status text, captions --- */
+/* --- Status bar, captions, meta text --- */
 .eyebrow,
 .phone-status,
 .domain-card-mode,
@@ -122,12 +176,11 @@ a {
 .install-status,
 .welcome-action-copy b,
 .brand div span {
-  font-family: "JostVF", sans-serif;
-  font-weight: 200;
-  font-variation-settings: "wght" 150;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-static);
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
 }
 
 .phone-status {
@@ -163,7 +216,7 @@ a {
   width: 19px;
   height: 10px;
   padding: 2px;
-  border: 1px solid var(--ink-static);
+  border: 1px solid var(--color-text-muted);
   border-radius: 3px;
 }
 
@@ -174,7 +227,7 @@ a {
   width: 2px;
   height: 4px;
   border-radius: 0 2px 2px 0;
-  background: var(--ink-static);
+  background: var(--color-text-muted);
   content: "";
 }
 
@@ -183,7 +236,7 @@ a {
   width: 72%;
   height: 100%;
   border-radius: 1px;
-  background: var(--ink-static);
+  background: var(--color-text-muted);
 }
 
 header {
@@ -195,7 +248,7 @@ header {
   justify-content: space-between;
   gap: 12px;
   padding: 6px 2px 13px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .brand {
@@ -212,8 +265,8 @@ header {
   flex: none;
   place-items: center;
   border-radius: 14px;
-  background: var(--surface-raised);
-  border: 1px solid var(--line);
+  background: var(--color-selected);
+  border: 1px solid var(--color-border);
 }
 
 .brand-mark svg {
@@ -227,18 +280,17 @@ header {
   display: block;
 }
 
-/* the app's own identity: signal step */
 .brand strong {
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
-  color: var(--ink-signal);
-  font-size: 15px;
+  font-family: "Fraunces", serif;
+  font-weight: 650;
+  color: var(--color-heading);
+  font-size: 16px;
   letter-spacing: 0;
 }
 
 .brand div span {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .home-link {
@@ -247,20 +299,21 @@ header {
   height: 40px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 50%;
-  background: var(--surface-raised);
-  color: var(--ink-settled);
-  font-size: 24px;
+  background: var(--color-surface);
+  color: var(--color-heading);
+  font-size: 22px;
   line-height: 1;
   text-decoration: none;
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .home-link:hover,
 .home-link:focus-visible {
-  border-color: var(--ink-signal);
-  color: var(--ink-signal);
+  border-color: var(--color-primary);
+  background: var(--color-selected);
 }
 
 main {
@@ -281,42 +334,33 @@ main::-webkit-scrollbar {
   font-size: 10px;
 }
 
-/* --- Signal step: screen titles, the game's own name --- */
+/* --- Headings: Fraunces, editorial, warm --- */
 h1,
 h2,
 h3,
 .dominant {
-  font-family: "JostVF", sans-serif;
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
+  font-family: "Fraunces", serif;
+  font-weight: 650;
   text-transform: none;
   letter-spacing: 0;
-  color: var(--ink-signal);
+  color: var(--color-heading);
   opacity: 0;
-  animation: signal-resolve 0.65s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation: heading-in 0.4s ease both;
 }
 
 h1 {
   max-width: 330px;
   margin: 9px 0 7px;
-  font-size: clamp(29px, 8vw, 36px);
-  line-height: 1.02;
+  font-size: clamp(28px, 8vw, 34px);
+  line-height: 1.08;
 }
 
-@keyframes signal-resolve {
-  from {
-    opacity: 0;
-    font-variation-settings: "wght" 200;
-    letter-spacing: 0.1em;
-  }
-  to {
-    opacity: 1;
-    font-variation-settings: "wght" 850;
-    letter-spacing: 0;
-  }
+@keyframes heading-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* --- Tuning step: body copy, descriptions, paragraph text --- */
+/* --- Body copy, descriptions, paragraph text: DM Sans --- */
 .intro,
 .story-copy,
 .welcome-hero p,
@@ -330,12 +374,11 @@ h1 {
 .onboarding-list li span,
 .welcome-radio-caption,
 .consent span {
-  font-family: "JostVF", sans-serif;
+  font-family: "DM Sans", sans-serif;
   font-weight: 400;
-  font-variation-settings: "wght" 350;
   text-transform: none;
-  letter-spacing: 0.03em;
-  color: var(--ink-tuning);
+  letter-spacing: 0.01em;
+  color: var(--color-text-secondary);
   line-height: 1.55;
 }
 
@@ -352,21 +395,22 @@ h1 {
 
 .welcome-hero {
   padding: 21px;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: var(--surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .welcome-hero h1 {
   max-width: 10ch;
   margin: 13px 0 10px;
-  font-size: clamp(36px, 10vw, 42px);
+  font-size: clamp(34px, 10vw, 40px);
 }
 
 .welcome-hero p,
 .welcome-note {
   font-size: 13px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .welcome-hero p {
@@ -382,9 +426,9 @@ h1 {
   overflow: hidden;
   margin-top: 18px;
   padding: 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 18px;
-  background: var(--surface-sunken);
+  background: var(--color-bg-secondary);
 }
 
 .welcome-radio-sun {
@@ -393,17 +437,17 @@ h1 {
   right: 24%;
   width: 54px;
   aspect-ratio: 1;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--color-accent);
   border-radius: 50%;
+  opacity: 0.5;
   animation: signal-pulse 3.2s ease-in-out infinite;
 }
 
-/* the station identity: signal step */
 .welcome-radio-sign {
   z-index: 1;
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
-  color: var(--ink-signal);
+  font-family: "Fraunces", serif;
+  font-weight: 650;
+  color: var(--color-primary);
   font-size: 22px;
   letter-spacing: 0;
 }
@@ -412,8 +456,8 @@ h1 {
   position: absolute;
   top: 12px;
   left: 14px;
-  font-size: 10px;
-  letter-spacing: 0.3em;
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 
@@ -422,10 +466,10 @@ h1 {
   display: flex;
   gap: 2px;
   padding: 10px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: var(--ground);
-  color: var(--ink-tuning);
+  background: var(--color-surface);
+  color: var(--color-accent);
   font-size: 20px;
   letter-spacing: 2px;
 }
@@ -442,13 +486,13 @@ h1 {
 .welcome-radio-bars span:nth-child(6) { animation-delay: 0.6s; }
 
 @keyframes bar-breathe {
-  0%, 100% { opacity: 0.45; transform: scaleY(0.85); }
+  0%, 100% { opacity: 0.55; transform: scaleY(0.85); }
   50% { opacity: 1; transform: scaleY(1.1); }
 }
 
 @keyframes signal-pulse {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.7; }
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.55; }
 }
 
 .welcome-heading {
@@ -457,7 +501,7 @@ h1 {
 
 .welcome-heading h2 {
   margin: 6px 0 0;
-  font-size: 24px;
+  font-size: 23px;
 }
 
 .welcome-action {
@@ -466,26 +510,26 @@ h1 {
   align-items: flex-start;
   gap: 14px;
   padding: 17px;
-  border: 1px solid var(--line);
-  border-radius: 19px;
-  background: var(--surface-raised);
-  color: var(--ink-tuning);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text-secondary);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
 }
 
 .welcome-action:hover,
 .welcome-action:focus-visible {
-  border-color: var(--line-strong);
-  background: var(--ground);
+  border-color: var(--color-border-active);
+  transform: translateY(-1px);
 }
 
 .welcome-action-primary {
-  border-color: var(--ink-signal-dim);
-  background: var(--ground);
-  box-shadow: inset 2px 0 var(--ink-signal);
+  border-color: var(--color-primary);
+  background: var(--color-selected);
 }
 
 .welcome-action-icon {
@@ -495,8 +539,8 @@ h1 {
   flex: none;
   place-items: center;
   border-radius: 13px;
-  background: var(--surface-sunken);
-  color: var(--ink-settled);
+  background: var(--color-accent-light);
+  color: var(--color-primary);
   font-size: 20px;
   font-weight: 700;
 }
@@ -510,18 +554,14 @@ h1 {
 }
 
 .welcome-action-copy strong {
-  font-family: "JostVF", sans-serif;
-  font-weight: 500;
-  font-variation-settings: "wght" 500;
-  color: var(--ink-settled);
-  font-size: 15px;
+  font-family: "Fraunces", serif;
+  font-weight: 600;
+  color: var(--color-heading);
+  font-size: 16px;
 }
 
-/* the primary call-to-action on the home screen: signal step */
 .welcome-action-primary .welcome-action-copy strong {
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
-  color: var(--ink-signal);
+  color: var(--color-primary);
 }
 
 .welcome-action-copy small {
@@ -534,6 +574,7 @@ h1 {
   justify-content: space-between;
   margin-top: 5px;
   font-size: 12px;
+  color: var(--color-primary);
 }
 
 .welcome-note {
@@ -554,20 +595,21 @@ h1 {
   align-items: flex-start;
   gap: 6px;
   padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface-raised);
-  color: var(--ink-settled);
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text-secondary);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, transform 0.15s;
 }
 
 .domain-card:hover,
 .domain-card:focus-visible {
-  border-color: var(--ink-signal-dim);
-  background: var(--ground);
+  border-color: var(--color-border-active);
+  transform: translateY(-1px);
 }
 
 .domain-card-icon {
@@ -576,29 +618,28 @@ h1 {
   height: 34px;
   place-items: center;
   border-radius: 11px;
-  background: var(--accent-green-dim);
-  color: var(--ink-signal);
+  background: var(--color-success-bg);
+  color: var(--color-success);
   font-size: 16px;
   font-weight: 700;
 }
 
-/* domain names are contribution targets: signal step */
 .domain-card-label {
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
-  color: var(--ink-signal);
+  font-family: "Fraunces", serif;
+  font-weight: 600;
+  color: var(--color-heading);
   font-size: 13.5px;
   line-height: 1.25;
 }
 
 .domain-card-mode {
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
 }
 
 .domain-card-free {
   border-style: dashed;
-  background: var(--ground);
+  background: var(--color-bg-secondary);
 }
 
 .install-banner {
@@ -607,10 +648,10 @@ h1 {
   align-items: center;
   gap: 14px;
   padding: 15px 17px;
-  border: 1px solid var(--ink-signal);
+  border: 1px solid var(--color-primary);
   border-radius: 16px;
-  background: var(--ink-signal-dim);
-  color: var(--ink-settled);
+  background: var(--color-selected);
+  color: var(--color-text-secondary);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -618,7 +659,7 @@ h1 {
 }
 
 .install-banner:hover {
-  background: rgba(252, 209, 22, 0.22);
+  background: var(--color-accent-light);
   transform: translateY(-1px);
 }
 
@@ -627,12 +668,12 @@ h1 {
 }
 
 .install-banner-ios:hover {
-  background: var(--ink-signal-dim);
+  background: var(--color-selected);
   transform: none;
 }
 
 .install-banner-ios b {
-  color: var(--ink-signal);
+  color: var(--color-primary);
 }
 
 .install-banner-icon {
@@ -642,8 +683,8 @@ h1 {
   flex: none;
   place-items: center;
   border-radius: 50%;
-  background: var(--ink-signal);
-  color: var(--ground);
+  background: var(--color-primary);
+  color: #FFFDF8;
   font-size: 16px;
   font-weight: 700;
 }
@@ -656,12 +697,10 @@ h1 {
   gap: 3px;
 }
 
-/* the one call-to-action this banner carries: signal step */
 .install-banner-copy strong {
-  font-family: "JostVF", sans-serif;
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
-  color: var(--ink-signal);
+  font-family: "Fraunces", serif;
+  font-weight: 650;
+  color: var(--color-primary);
   font-size: 15px;
 }
 
@@ -672,7 +711,7 @@ h1 {
 
 .install-banner-arrow {
   flex: none;
-  color: var(--ink-signal);
+  color: var(--color-primary);
   font-size: 18px;
 }
 
@@ -694,22 +733,23 @@ h1 {
   flex: 1;
   overflow: hidden;
   border-radius: 99px;
-  background: var(--surface-sunken);
+  background: var(--color-bg-secondary);
 }
 
 .progress span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--ink-signal);
+  background: var(--color-primary);
   transition: width 0.25s ease;
 }
 
 .card {
   padding: 19px 17px;
-  border: 1px solid var(--line);
-  border-radius: 23px;
-  background: var(--surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .mission-heading {
@@ -721,8 +761,8 @@ h1 {
 
 .mission-heading h2 {
   margin: 6px 0 0;
-  font-size: 23px;
-  line-height: 1.12;
+  font-size: 22px;
+  line-height: 1.15;
 }
 
 .story-copy {
@@ -730,18 +770,21 @@ h1 {
   font-size: 13px;
 }
 
-/* form field labels: settled step */
+/* form field labels: settled register */
 .prompt-label {
   display: block;
   margin: 19px 0 9px;
-  font-family: "JostVF", sans-serif;
-  font-weight: 500;
-  font-variation-settings: "wght" 500;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  color: var(--ink-settled);
+  color: var(--color-heading);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.prompt-label-dominant {
+  color: var(--color-primary);
 }
 
 .choices {
@@ -749,37 +792,32 @@ h1 {
   gap: 8px;
 }
 
-/* domain items are list rows: settled step */
 .choice {
   width: 100%;
   min-height: 50px;
   padding: 12px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 14px;
-  background: var(--ground);
-  color: var(--ink-settled);
-  font-family: "JostVF", sans-serif;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: "DM Sans", sans-serif;
   font-weight: 500;
-  font-variation-settings: "wght" 500;
   font-size: 13px;
   line-height: 1.45;
   text-align: left;
   cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s,
-    transform 0.15s;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
 }
 
 .choice:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: var(--ink-signal-dim);
+  border-color: var(--color-border-active);
 }
 
 .choice[aria-pressed="true"] {
-  border-color: var(--ink-signal);
-  background: var(--ink-signal-dim);
-  box-shadow: inset 3px 0 var(--ink-signal);
+  border-color: var(--color-primary);
+  background: var(--color-selected);
+  box-shadow: inset 3px 0 var(--color-primary);
 }
 
 .choice:disabled {
@@ -790,7 +828,7 @@ h1 {
   scroll-margin-top: 16px;
   margin-top: 20px;
   padding-top: 18px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--color-border);
 }
 
 #contribution.task {
@@ -804,17 +842,15 @@ h1 {
   font-size: 12px;
 }
 
-/* a read-only proposed value behaves like a settled form field */
 .locked-text {
   margin: 0;
   padding: 12px 13px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 13px;
-  background: var(--surface-sunken);
-  font-family: "JostVF", sans-serif;
+  background: var(--color-bg-secondary);
+  font-family: "DM Sans", sans-serif;
   font-weight: 500;
-  font-variation-settings: "wght" 500;
-  color: var(--ink-settled);
+  color: var(--color-text);
   font-size: 14px;
 }
 
@@ -825,7 +861,7 @@ h1 {
 
 .task h3 {
   margin: 0 0 6px;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .task p {
@@ -840,14 +876,13 @@ input[type="password"] {
   width: 100%;
   min-height: 88px;
   padding: 12px 13px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
   outline: none;
-  background: var(--surface-sunken);
-  font-family: "JostVF", sans-serif;
+  background: var(--color-surface);
+  font-family: "DM Sans", sans-serif;
   font-weight: 500;
-  font-variation-settings: "wght" 500;
-  color: var(--ink-settled);
+  color: var(--color-text);
   font-size: 14px;
   resize: vertical;
 }
@@ -859,8 +894,8 @@ input[type="password"] {
 
 textarea:focus,
 input:focus {
-  border-color: var(--ink-settled);
-  box-shadow: 0 0 0 3px var(--line);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 
 .record-row {
@@ -872,21 +907,19 @@ input:focus {
 }
 
 /*
-  Signal step: the bare `.button` class is used throughout the template for
-  exactly one primary action per screen — this is the resolved call-to-action.
-  `.button-secondary` carries the settled register for every other action
+  The bare `.button` class is used throughout the template for exactly one
+  primary action per screen. `.button-secondary` carries every other action
   (skip, preview, re-record, undo).
 */
 .button {
   min-height: 48px;
   padding: 12px 16px;
-  border: 1px solid var(--ink-signal);
-  border-radius: 15px;
-  background: var(--ground);
-  color: var(--ink-signal);
-  font-family: "JostVF", sans-serif;
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-button);
+  background: var(--color-primary);
+  color: #FFFDF8;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 700;
   font-style: normal;
   font-size: 14px;
   text-transform: none;
@@ -896,7 +929,8 @@ input:focus {
 }
 
 .button:hover:not(:disabled) {
-  background: var(--ink-signal-dim);
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
 }
 
 .button:active:not(:disabled) {
@@ -905,22 +939,23 @@ input:focus {
 
 .button:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  background: var(--color-primary-disabled);
+  border-color: var(--color-primary-disabled);
+  opacity: 0.8;
 }
 
 .button-secondary {
-  border: 1px solid var(--line);
-  background: var(--surface-raised);
-  color: var(--ink-settled);
-  font-family: "JostVF", sans-serif;
-  font-weight: 500;
-  font-variation-settings: "wght" 500;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-heading);
+  font-family: "DM Sans", sans-serif;
+  font-weight: 600;
   font-style: normal;
 }
 
 .button-secondary:hover:not(:disabled) {
-  border-color: var(--line-strong);
-  background: var(--ground);
+  border-color: var(--color-border-active);
+  background: var(--color-bg-secondary);
 }
 
 .hint {
@@ -940,9 +975,9 @@ audio {
   gap: 10px;
   margin-top: 16px;
   padding: 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 13px;
-  background: var(--surface-sunken);
+  background: var(--color-bg-secondary);
   font-size: 11px;
   line-height: 1.5;
   cursor: pointer;
@@ -953,7 +988,7 @@ audio {
   height: 19px;
   flex: none;
   margin: 1px 0 0;
-  accent-color: var(--ink-signal);
+  accent-color: var(--color-primary);
 }
 
 .actions {
@@ -968,11 +1003,11 @@ audio {
 }
 
 .status[data-state="error"] {
-  color: var(--status-error);
+  color: var(--color-error);
 }
 
 .status[data-state="success"] {
-  color: var(--status-success);
+  color: var(--color-success);
 }
 
 .result {
@@ -982,7 +1017,7 @@ audio {
 
 .result h2 {
   margin: 9px 0;
-  font-size: 29px;
+  font-size: 28px;
 }
 
 .result p {
@@ -993,10 +1028,10 @@ audio {
 .small-note {
   margin: 17px 2px 0;
   padding: 14px 0 6px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--color-border);
   font-size: 10px;
   line-height: 1.55;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
 
 .phone-nav {
@@ -1008,8 +1043,8 @@ audio {
   align-items: stretch;
   margin: 0 -18px;
   padding: 5px 8px max(7px, env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line);
-  background: var(--surface-raised);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 
 .phone-nav-item,
@@ -1023,13 +1058,12 @@ audio {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  font-family: "JostVF", sans-serif;
-  font-weight: 200;
-  font-variation-settings: "wght" 150;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-static);
-  font-size: 9px;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
   text-decoration: none;
   cursor: pointer;
   transition: color 0.15s ease;
@@ -1037,28 +1071,18 @@ audio {
 
 .phone-nav-item > span:first-child,
 .phone-nav-item-dominant > span:first-child {
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.15;
 }
 
-/* the active nav item is always the resolved signal, regardless of label */
 .phone-nav-item.is-active,
 .phone-nav-item-dominant.is-active {
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--ink-signal);
-  font-size: 11px;
-}
-
-.phone-nav-item.is-active > span:first-child,
-.phone-nav-item-dominant.is-active > span:first-child {
-  font-size: 19px;
+  font-weight: 700;
+  color: var(--color-primary);
 }
 
 :focus-visible {
-  outline: 2px solid var(--ink-signal);
+  outline: 2px solid var(--color-primary);
   outline-offset: 3px;
 }
 
@@ -1071,14 +1095,14 @@ audio {
 
 .chapter-title-row h1 {
   margin-bottom: 5px;
-  font-size: clamp(24px, 6vw, 29px);
+  font-size: clamp(23px, 6vw, 28px);
 }
 
 .chapter-title-row .eyebrow {
   font-size: 9px;
 }
 
-/* the contribution counter: a key number, signal step */
+/* the contribution counter: a key number, brand-colored */
 .signal-count {
   display: flex;
   min-width: 62px;
@@ -1087,10 +1111,10 @@ audio {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  border: 1px solid var(--ink-signal-dim);
+  border: 1px solid var(--color-accent-light);
   border-radius: 14px;
-  background: var(--ink-signal-dim);
-  color: var(--ink-signal);
+  background: var(--color-accent-light);
+  color: var(--color-primary);
   font-size: 13px;
 }
 
@@ -1099,8 +1123,8 @@ audio {
 }
 
 .signal-count strong {
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
+  font-family: "Fraunces", serif;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1109,7 +1133,7 @@ audio {
   line-height: 1.6;
 }
 
-/* reused as the "back" control (settled, secondary action) */
+/* reused as the "back" control (secondary action) */
 .history-toggle {
   display: flex;
   width: 100%;
@@ -1118,15 +1142,14 @@ audio {
   gap: 8px;
   margin: 14px 0;
   padding: 9px 11px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 13px;
-  background: var(--surface-raised);
-  font-family: "JostVF", sans-serif;
-  font-weight: 500;
-  font-variation-settings: "wght" 500;
+  background: var(--color-surface);
+  font-family: "DM Sans", sans-serif;
+  font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  color: var(--ink-settled);
+  color: var(--color-heading);
   font-size: 11px;
   text-align: left;
   cursor: pointer;
@@ -1138,8 +1161,8 @@ audio {
 }
 
 .history-toggle:hover {
-  border-color: var(--line-strong);
-  background: var(--ground);
+  border-color: var(--color-border-active);
+  background: var(--color-bg-secondary);
 }
 
 .dialogue-box {
@@ -1150,10 +1173,10 @@ audio {
   gap: 10px;
   margin: -1px 9px 0;
   padding: 13px 12px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-top: 0;
   border-radius: 0 0 16px 16px;
-  background: var(--surface-sunken);
+  background: var(--color-bg-secondary);
 }
 
 .radio-avatar {
@@ -1162,7 +1185,7 @@ audio {
   height: 40px;
   flex: none;
   overflow: hidden;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--color-border);
   border-radius: 50%;
 }
 
@@ -1190,30 +1213,30 @@ audio {
 
 .dialogue-caret {
   align-self: flex-end;
-  color: var(--ink-static);
+  color: var(--color-text-muted);
   font-size: 9px;
 }
 
 .mission-card {
   margin-top: 13px;
   padding: 15px 13px 13px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 19px;
-  background: var(--surface-raised);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .mission-heading h2 {
   font-size: 19px;
 }
 
-/* the domain name shown here is a contribution target: signal step */
 .mission-heading .eyebrow {
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--ink-signal);
-  font-size: 11px;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-primary);
+  font-size: 10.5px;
 }
 
 .mission-card .prompt-label {
@@ -1241,33 +1264,32 @@ audio {
   height: 22px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 7px;
   font-size: 9px;
 }
 
 .choice-text {
   flex: 1;
-  font-family: "JostVF", sans-serif;
+  font-family: "DM Sans", sans-serif;
   font-weight: 500;
-  font-variation-settings: "wght" 500;
-  color: var(--ink-settled);
+  color: var(--color-text);
 }
 
 .choice-arrow {
-  color: var(--ink-static);
+  color: var(--color-text-muted);
   font-size: 13px;
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .choice.is-selected .choice-index {
-  border-color: var(--ink-signal);
-  background: var(--ink-signal-dim);
-  color: var(--ink-signal);
+  border-color: var(--color-primary);
+  background: var(--color-selected);
+  color: var(--color-primary);
 }
 
 .choice.is-selected .choice-arrow {
-  color: var(--ink-signal);
+  color: var(--color-primary);
   opacity: 1;
 }
 
@@ -1289,10 +1311,10 @@ audio {
   height: 34px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--ink-signal-dim);
+  border: 1px solid var(--color-accent-light);
   border-radius: 11px;
-  background: var(--ink-signal-dim);
-  color: var(--ink-signal);
+  background: var(--color-accent-light);
+  color: var(--color-primary);
   font-size: 16px;
 }
 
@@ -1302,7 +1324,8 @@ audio {
 
 .task h3 {
   margin-top: 3px;
-  font-size: 15px;
+  font-family: "Fraunces", serif;
+  font-weight: 600;
 }
 
 .mission-card .task p {
@@ -1315,9 +1338,9 @@ audio {
   gap: 10px;
   margin-top: 13px;
   padding: 11px;
-  border: 1px solid var(--status-success-dim);
+  border: 1px solid var(--color-success-bg);
   border-radius: 13px;
-  background: var(--status-success-dim);
+  background: var(--color-success-bg);
 }
 
 .reward-star {
@@ -1327,8 +1350,8 @@ audio {
   flex: none;
   place-items: center;
   border-radius: 10px;
-  background: rgba(111, 207, 122, 0.18);
-  color: var(--status-success);
+  background: rgba(66, 99, 72, 0.16);
+  color: var(--color-success);
 }
 
 .mission-reward strong,
@@ -1337,10 +1360,10 @@ audio {
 }
 
 .mission-reward strong {
-  color: var(--status-success);
+  color: var(--color-success);
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
 }
 
 .mission-reward span:not(.reward-star) {
@@ -1349,16 +1372,16 @@ audio {
   line-height: 1.4;
 }
 
-/* concentric signal rings double as the "mission complete" art — the same
-   broadcast-ring motif as the direction's premise */
+/* concentric signal rings as the "mission complete" art — a discreet nod to
+   the radio-broadcast fiction, recolored to the earth-tone accent */
 .ending-art {
   position: relative;
   width: 112px;
   height: 112px;
   margin: 0 auto 15px;
-  border: 1px solid var(--ink-signal-dim);
+  border: 1px solid var(--color-accent-light);
   border-radius: 50%;
-  background: var(--ink-signal-dim);
+  background: var(--color-accent-light);
 }
 
 .ending-signal {
@@ -1367,7 +1390,7 @@ audio {
   left: 37px;
   width: 36px;
   height: 49px;
-  border-right: 2px solid var(--ink-signal);
+  border-right: 2px solid var(--color-accent);
   border-radius: 50%;
   transform: rotate(-12deg);
 }
@@ -1390,7 +1413,7 @@ audio {
   position: absolute;
   top: 44px;
   left: 47px;
-  color: var(--ink-signal);
+  color: var(--color-primary);
   font-size: 20px;
 }
 
@@ -1398,7 +1421,7 @@ audio {
   body {
     display: block;
     padding: 0;
-    background: var(--ground);
+    background: var(--color-bg);
   }
 
   .shell {
@@ -1480,7 +1503,7 @@ audio {
   }
 }
 
-/* --- Assistant screen (ported from the previous Gradio chat screen) --- */
+/* --- Assistant screen --- */
 
 .assistant-card {
   text-align: center;
@@ -1492,34 +1515,31 @@ audio {
 
 .assistant-head h1 {
   margin: 8px 0 14px;
-  font-size: 27px;
+  font-size: 26px;
 }
 
-/* the language select is a form control: settled step */
 .assistant-language {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   font-size: 12px;
-  letter-spacing: 0.02em;
-  color: var(--ink-settled);
+  letter-spacing: 0.01em;
+  color: var(--color-text-secondary);
 }
 
 .assistant-language select {
   min-width: 128px;
   padding: 9px 32px 9px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background-color: var(--surface-raised);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23fcd116' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-color: var(--color-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23A9472D' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
-  color: var(--ink-settled);
-  font-family: "JostVF", sans-serif;
+  color: var(--color-text);
+  font-family: "DM Sans", sans-serif;
   font-weight: 500;
-  font-variation-settings: "wght" 500;
-  font: inherit;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
@@ -1579,13 +1599,12 @@ audio {
   gap: 10px;
   margin: 4px auto 0;
   padding: 13px 24px;
-  border: 1px solid var(--ink-signal);
+  border: 1px solid var(--color-primary);
   border-radius: 999px;
-  background: var(--ground);
-  color: var(--ink-signal);
-  font-family: "JostVF", sans-serif;
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
+  background: var(--color-primary);
+  color: #FFFDF8;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 700;
   font-style: normal;
   font-size: 15px;
   cursor: pointer;
@@ -1593,7 +1612,7 @@ audio {
 }
 
 .mic-button:hover:not(:disabled) {
-  background: var(--ink-signal-dim);
+  background: var(--color-primary-hover);
 }
 
 .mic-button svg {
@@ -1602,13 +1621,14 @@ audio {
 }
 
 .mic-button[data-state="listening"] {
-  background: var(--ink-signal);
-  color: var(--ground);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-heading);
   animation: mic-pulse 1.6s ease-in-out infinite;
 }
 
 @keyframes mic-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--ink-signal-dim); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(213, 160, 68, 0.3); }
   50% { box-shadow: 0 0 0 8px transparent; }
 }
 
@@ -1623,7 +1643,7 @@ audio {
   margin: 12px auto 0;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--surface-sunken);
+  background: var(--color-bg-secondary);
 }
 
 .progress-track[data-mode="hidden"] {
@@ -1633,28 +1653,28 @@ audio {
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: var(--ink-signal);
+  background: var(--color-primary);
   transition: width 100ms linear;
 }
 
 .progress-track[data-mode="complete"] .progress-fill {
-  background: var(--status-success);
+  background: var(--color-success);
 }
 
 .progress-track[data-mode="error"] .progress-fill {
-  background: var(--status-error);
+  background: var(--color-error);
 }
 
 .assistant-transcript h2 {
   margin: 0 0 4px;
-  font-size: 19px;
+  font-size: 18px;
 }
 
 .contribution-box {
   margin-top: 16px;
   padding: 14px;
   border-radius: 15px;
-  background: var(--surface-sunken);
+  background: var(--color-bg-secondary);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1678,8 +1698,8 @@ audio {
 
 .onboarding-card h1 {
   margin: 10px 0 12px;
-  font-size: 25px;
-  line-height: 1.15;
+  font-size: 24px;
+  line-height: 1.2;
 }
 
 .onboarding-list {
@@ -1695,23 +1715,22 @@ audio {
   flex-direction: column;
   gap: 2px;
   padding: 11px 13px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 13px;
-  background: var(--surface-raised);
+  background: var(--color-surface);
 }
 
 .onboarding-list li strong {
-  font-family: "JostVF", sans-serif;
-  font-weight: 500;
-  font-variation-settings: "wght" 500;
-  color: var(--ink-settled);
+  font-family: "DM Sans", sans-serif;
+  font-weight: 600;
+  color: var(--color-heading);
   font-size: 13px;
 }
 
 .onboarding-list li strong.dominant {
-  font-weight: 800;
-  font-variation-settings: "wght" 850;
-  color: var(--ink-signal);
+  font-family: "Fraunces", serif;
+  font-weight: 650;
+  color: var(--color-primary);
 }
 
 .onboarding-list li span {
@@ -1730,11 +1749,11 @@ audio {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--line-strong);
+  background: var(--color-border);
 }
 
 .onboarding-dots span.is-active {
-  background: var(--ink-signal);
+  background: var(--color-primary);
 }
 
 .onboarding-actions {
@@ -1744,33 +1763,31 @@ audio {
   margin-top: 20px;
 }
 
-/* the pseudonym is a plain identity field: settled step, like any form input */
 #speaker-label {
   display: block;
   width: 100%;
   box-sizing: border-box;
   min-height: 48px;
   padding: 12px 13px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 13px;
   outline: none;
-  background: var(--surface-sunken);
-  font-family: "JostVF", sans-serif;
-  color: var(--ink-settled);
+  background: var(--color-surface);
+  font-family: "DM Sans", sans-serif;
+  color: var(--color-text);
   font-weight: 500;
-  font-variation-settings: "wght" 500;
   font-size: 15px;
 }
 
 #speaker-label:focus {
-  border-color: var(--ink-settled);
-  box-shadow: 0 0 0 3px var(--line);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 
 /*
-  Fon special-character toolbar: a functional UI element, not hierarchy
-  content, so it uses the "settled" step for its keys and the green accent
-  (never the signal-hue) for the open/active tone drawer.
+  Fon special-character toolbar: a functional UI element, styled as a plain
+  settled control — the open/active tone drawer uses the vert-végétal accent,
+  never the brand terre-cuite, to keep it visually distinct from primary CTAs.
 */
 .fon-keyboard {
   display: flex;
@@ -1793,13 +1810,12 @@ audio {
   min-width: 36px;
   min-height: 36px;
   padding: 4px 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: var(--surface-raised);
-  color: var(--ink-settled);
-  font-family: "JostVF", sans-serif;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: "DM Sans", sans-serif;
   font-weight: 500;
-  font-variation-settings: "wght" 500;
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
@@ -1807,14 +1823,14 @@ audio {
 }
 
 .fon-key:hover {
-  border-color: var(--line-strong);
-  background: var(--ground);
+  border-color: var(--color-border-active);
+  background: var(--color-bg-secondary);
 }
 
 .fon-key.is-open {
-  border-color: var(--accent-green);
-  background: var(--accent-green-dim);
-  color: var(--ink-signal);
+  border-color: var(--color-success);
+  background: var(--color-success-bg);
+  color: var(--color-success);
 }
 
 .fon-tone-drawer {
@@ -1828,10 +1844,10 @@ audio {
   width: max-content;
   max-width: 220px;
   padding: 8px;
-  border: 1px solid var(--accent-green);
+  border: 1px solid var(--color-success);
   border-radius: 12px;
-  background: var(--surface-raised);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .fon-key-tone {
