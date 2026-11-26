@@ -6,8 +6,8 @@
   "scope": "/game",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#120f0c",
-  "theme_color": "#120f0c",
+  "background_color": "#161A3D",
+  "theme_color": "#161A3D",
   "lang": "fr",
   "icons": [
     {

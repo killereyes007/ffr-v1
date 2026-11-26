@@ -57,16 +57,16 @@
 
 :root {
   color-scheme: light;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-optical-sizing: auto;
-  background: #FAF5EC;
-  color: #2B241F;
+  background: #161A3D;
+  color: #161A3D;
   text-rendering: optimizeLegibility;
 
   /* Backgrounds */
-  --color-bg: #FAF5EC;
+  --color-bg: #161A3D;
   --color-bg-secondary: #F5EBDD;
-  --color-surface: #FFFDF8;
+  --color-surface: #F6ECD6;
   --color-card: #F0E5D5;
   --color-selected: #F5E8C9;
 
@@ -78,10 +78,10 @@
   --color-accent-light: #F5E8C9;
 
   /* Typography */
-  --color-heading: #38251D;
-  --color-text: #2B241F;
-  --color-text-secondary: #75685B;
-  --color-text-muted: #9B8B79;
+  --color-heading: #161A3D;
+  --color-text: #161A3D;
+  --color-text-secondary: #4A4E78;
+  --color-text-muted: #4A4E78;
 
   /* Borders */
   --color-border: #E2D5C4;
@@ -95,8 +95,8 @@
   --color-info: #496B78;
 
   /* Typography */
-  --font-heading: "Fraunces", serif;
-  --font-body: "DM Sans", sans-serif;
+  --font-heading: var(--xo-font-body);
+  --font-body: var(--xo-font-body);
 
   /* Radius */
   --radius-card: 20px;
@@ -176,7 +176,7 @@ a {
 .install-status,
 .welcome-action-copy b,
 .brand div span {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -281,7 +281,7 @@ header {
 }
 
 .brand strong {
-  font-family: "Fraunces", serif;
+  font-family: var(--xo-font-body);
   font-weight: 650;
   color: var(--color-heading);
   font-size: 16px;
@@ -339,7 +339,7 @@ h1,
 h2,
 h3,
 .dominant {
-  font-family: "Fraunces", serif;
+  font-family: var(--xo-font-body);
   font-weight: 650;
   text-transform: none;
   letter-spacing: 0;
@@ -374,7 +374,7 @@ h1 {
 .onboarding-list li span,
 .welcome-radio-caption,
 .consent span {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0.01em;
@@ -454,7 +454,7 @@ h1 {
 
 .welcome-radio-sign {
   z-index: 1;
-  font-family: "Fraunces", serif;
+  font-family: var(--xo-font-body);
   font-weight: 650;
   color: var(--color-primary);
   font-size: 22px;
@@ -563,7 +563,7 @@ h1 {
 }
 
 .welcome-action-copy strong {
-  font-family: "Fraunces", serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
   color: var(--color-heading);
   font-size: 16px;
@@ -641,7 +641,7 @@ h1 {
 }
 
 .domain-card-label {
-  font-family: "Fraunces", serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
   color: var(--color-heading);
   font-size: 13.5px;
@@ -700,7 +700,7 @@ h1 {
   place-items: center;
   border-radius: 50%;
   background: var(--color-primary);
-  color: #FFFDF8;
+  color: #F6ECD6;
   font-size: 16px;
   font-weight: 700;
 }
@@ -714,7 +714,7 @@ h1 {
 }
 
 .install-banner-copy strong {
-  font-family: "Fraunces", serif;
+  font-family: var(--xo-font-body);
   font-weight: 650;
   color: var(--color-primary);
   font-size: 15px;
@@ -790,7 +790,7 @@ h1 {
 .prompt-label {
   display: block;
   margin: 19px 0 9px;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
@@ -816,7 +816,7 @@ h1 {
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text-secondary);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
   font-size: 12px;
   cursor: pointer;
@@ -846,7 +846,7 @@ h1 {
   border-radius: 14px;
   background: var(--color-surface);
   color: var(--color-text);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 500;
   font-size: 13px;
   line-height: 1.45;
@@ -894,7 +894,7 @@ h1 {
   border: 1px solid var(--color-border);
   border-radius: 13px;
   background: var(--color-bg-secondary);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 500;
   color: var(--color-text);
   font-size: 14px;
@@ -926,7 +926,7 @@ input[type="password"] {
   border-radius: var(--radius-input);
   outline: none;
   background: var(--color-surface);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 500;
   color: var(--color-text);
   font-size: 14px;
@@ -963,8 +963,8 @@ input:focus {
   border: 1px solid var(--color-primary);
   border-radius: var(--radius-button);
   background: var(--color-primary);
-  color: #FFFDF8;
-  font-family: "DM Sans", sans-serif;
+  color: #F6ECD6;
+  font-family: var(--xo-font-body);
   font-weight: 700;
   font-style: normal;
   font-size: 14px;
@@ -994,7 +994,7 @@ input:focus {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-heading);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
   font-style: normal;
 }
@@ -1104,7 +1104,7 @@ audio {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
@@ -1169,7 +1169,7 @@ audio {
 }
 
 .signal-count strong {
-  font-family: "Fraunces", serif;
+  font-family: var(--xo-font-body);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
@@ -1191,7 +1191,7 @@ audio {
   border: 1px solid var(--color-border);
   border-radius: 13px;
   background: var(--color-surface);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
@@ -1277,7 +1277,7 @@ audio {
 }
 
 .mission-heading .eyebrow {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1317,7 +1317,7 @@ audio {
 
 .choice-text {
   flex: 1;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 500;
   color: var(--color-text);
 }
@@ -1370,7 +1370,7 @@ audio {
 
 .task h3 {
   margin-top: 3px;
-  font-family: "Fraunces", serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
 }
 
@@ -1584,7 +1584,7 @@ audio {
   background-repeat: no-repeat;
   background-position: right 14px center;
   color: var(--color-text);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 500;
   cursor: pointer;
   appearance: none;
@@ -1648,8 +1648,8 @@ audio {
   border: 1px solid var(--color-primary);
   border-radius: 999px;
   background: var(--color-primary);
-  color: #FFFDF8;
-  font-family: "DM Sans", sans-serif;
+  color: #F6ECD6;
+  font-family: var(--xo-font-body);
   font-weight: 700;
   font-style: normal;
   font-size: 15px;
@@ -1767,14 +1767,14 @@ audio {
 }
 
 .onboarding-list li strong {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 600;
   color: var(--color-heading);
   font-size: 13px;
 }
 
 .onboarding-list li strong.dominant {
-  font-family: "Fraunces", serif;
+  font-family: var(--xo-font-body);
   font-weight: 650;
   color: var(--color-primary);
 }
@@ -1819,7 +1819,7 @@ audio {
   border-radius: 13px;
   outline: none;
   background: var(--color-surface);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   color: var(--color-text);
   font-weight: 500;
   font-size: 15px;
@@ -1860,7 +1860,7 @@ audio {
   border-radius: 10px;
   background: var(--color-surface);
   color: var(--color-text);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--xo-font-body);
   font-weight: 500;
   font-size: 15px;
   line-height: 1;

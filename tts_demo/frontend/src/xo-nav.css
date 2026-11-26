@@ -1,0 +1,463 @@
+/*
+  Navigation (barre du bas, menu tiroir, retour) et refonte de l'assistant.
+  Palette du prompt uniquement ; cibles tactiles >= 48 px.
+*/
+
+.xo-icon {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+/* ---------- En-tête : bouton menu ---------- */
+.xo-menu-btn {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #F5B82E;
+  color: #161A3D;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0B0D22;
+}
+.xo-menu-btn:active {
+  transform: translateY(4px);
+  box-shadow: none;
+}
+
+/* ---------- Barre du bas : 4 entrées avec icônes SVG ---------- */
+.phone-nav.xo-nav {
+  min-height: 72px;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 2px solid #3A4290;
+  background: #F6ECD6;
+}
+.xo-nav .phone-nav-item {
+  position: relative;
+  min-height: 56px;
+  gap: 3px;
+  color: #4A4E78;
+  font-size: 12px;
+  font-weight: 700;
+}
+.xo-nav .phone-nav-item .xo-icon {
+  width: 26px;
+  height: 26px;
+}
+.xo-nav .phone-nav-item.is-active {
+  color: #161A3D;
+  font-weight: 800;
+}
+.xo-nav .phone-nav-item.is-active::before {
+  /* pastille jaune derrière l'icône active */
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 52px;
+  height: 32px;
+  border-radius: 999px;
+  background: #F5B82E;
+  transform: translateX(-50%);
+  z-index: 0;
+}
+.xo-nav .phone-nav-item > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- Menu tiroir ---------- */
+.xo-drawer-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(11, 13, 34, 0.72);
+  animation: xo-fade 0.18s ease-out;
+}
+.xo-drawer {
+  display: flex;
+  width: min(330px, 88%);
+  height: 100%;
+  flex-direction: column;
+  overflow-y: auto;
+  background: #161A3D;
+  border-left: 2px solid #3A4290;
+  color: #F6ECD6;
+  animation: xo-slide 0.22s ease-out;
+}
+.xo-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 18px 8px;
+}
+.xo-drawer-title {
+  font-family: var(--xo-font-title);
+  font-size: 22px;
+  text-transform: uppercase;
+}
+.xo-drawer-close {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 2px solid #F6ECD6;
+  border-radius: 50%;
+  background: transparent;
+  color: #F6ECD6;
+  cursor: pointer;
+}
+.xo-drawer-list {
+  display: grid;
+  gap: 12px;
+  padding: 12px 18px;
+}
+.xo-drawer-item {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: #232A63;
+  color: #F6ECD6;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0B0D22;
+}
+.xo-drawer-item .xo-icon {
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  border-radius: 50%;
+  background: #F5B82E;
+  color: #161A3D;
+}
+.xo-drawer-item.is-active {
+  background: #F5B82E;
+  color: #161A3D;
+}
+.xo-drawer-item.is-active .xo-icon {
+  background: #161A3D;
+  color: #F5B82E;
+}
+.xo-drawer-item:active {
+  transform: translateY(4px);
+  box-shadow: none;
+}
+.xo-drawer-note {
+  margin: auto 18px 20px;
+  color: #B9B6D3;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.xo-drawer :focus-visible,
+.xo-menu-btn:focus-visible,
+.xo-back:focus-visible {
+  outline: 3px solid #F6ECD6;
+  outline-offset: 3px;
+}
+@keyframes xo-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes xo-slide {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* ---------- Bouton retour ---------- */
+.xo-back {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 12px;
+  padding: 0 18px 0 10px;
+  border: 2px solid #F6ECD6;
+  border-radius: 999px;
+  background: transparent;
+  color: #F6ECD6;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* =====================================================================
+   Assistant (« guide de jeu »)
+   ===================================================================== */
+.assistant-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.assistant-screen > section {
+  width: 100%;
+}
+.assistant-screen .assistant-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 20px 16px 22px;
+  border: 2px solid #3A4290;
+  border-radius: 24px;
+  background: #232A63;
+  box-shadow: 0 6px 0 #0B0D22;
+  color: #F6ECD6;
+  --color-heading: #F6ECD6;
+  --color-text: #F6ECD6;
+  --color-text-secondary: #D9D3E8;
+  --color-text-muted: #B9B6D3;
+}
+.assistant-head {
+  order: 1;
+  display: grid;
+  justify-items: center;
+  margin-bottom: 8px;
+}
+.xo-kicker {
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: #F5B82E;
+  color: #161A3D;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.assistant-head h1 {
+  margin: 12px 0 12px;
+  color: #F6ECD6;
+  font-size: 28px;
+  text-shadow: 0 5px 0 #0B0D22;
+}
+.assistant-language {
+  color: #D9D3E8;
+  font-size: 14px;
+  font-weight: 700;
+}
+.assistant-language select {
+  min-height: 48px;
+  border: 2px solid #161A3D;
+  color: #161A3D;
+  font-weight: 700;
+}
+
+/* Bulle de statut : le guide « parle » au-dessus de lui. */
+.assistant-card .status {
+  order: 2;
+  position: relative;
+  max-width: 300px;
+  margin: 10px 0 18px;
+  padding: 12px 16px;
+  border-radius: 22px;
+  background: #F6ECD6;
+  color: #161A3D;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-transform: none;
+  box-shadow: 0 4px 0 #0B0D22;
+}
+.assistant-card .status::after {
+  content: "";
+  position: absolute;
+  bottom: -11px;
+  left: 50%;
+  margin-left: -11px;
+  border: 11px solid transparent;
+  border-top-color: #F6ECD6;
+  border-bottom: 0;
+}
+.assistant-card .status[data-state="error"] {
+  background: #F6ECD6;
+  color: #9A3412;
+  outline: 3px solid #9A3412;
+}
+
+.assistant-card .guide-halo {
+  order: 3;
+  position: relative;
+  min-height: 0;
+  margin-bottom: 6px;
+}
+.assistant-card .guide-halo::before {
+  /* disque jaune « autocollant » derrière le guide */
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  border: 3px solid #0B0D22;
+  border-radius: 50%;
+  background: #F5B82E;
+  transform: translateX(-50%);
+}
+.assistant-card .guide {
+  position: relative;
+  height: 220px;
+}
+
+/* Micro central rond, anneaux pulsés. */
+.xo-mic-zone {
+  order: 4;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.assistant-card .mic-button {
+  position: relative;
+  display: grid;
+  width: 104px;
+  height: 104px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #E0592A;
+  color: #161A3D;
+  box-shadow: 0 6px 0 #0B0D22;
+  animation: none;
+}
+.assistant-card .mic-button:hover:not(:disabled) {
+  background: #E0592A;
+}
+.assistant-card .mic-button:active:not(:disabled) {
+  transform: translateY(6px);
+  box-shadow: none;
+}
+.assistant-card .mic-button .xo-icon {
+  position: relative;
+  z-index: 1;
+  width: 46px;
+  height: 46px;
+}
+.assistant-card .mic-button::before,
+.assistant-card .mic-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 3px solid #F5B82E;
+  border-radius: 50%;
+  opacity: 0;
+  animation: xo-pulse 2s ease-out infinite;
+}
+.assistant-card .mic-button::after {
+  border-color: #E0592A;
+  animation-delay: 1s;
+}
+.assistant-card .mic-button[data-state="listening"] {
+  background: #F5B82E;
+  animation: none;
+}
+.assistant-card .mic-button[data-state="listening"]::before,
+.assistant-card .mic-button[data-state="listening"]::after {
+  animation-duration: 1s;
+}
+.assistant-card .mic-button:disabled {
+  opacity: 0.55;
+}
+.xo-mic-label {
+  color: #F6ECD6;
+  font-size: 17px;
+  font-weight: 800;
+}
+.assistant-card .progress-track {
+  order: 5;
+  height: 10px;
+  margin-top: 16px;
+  border: 2px solid #3A4290;
+  background: #161A3D;
+}
+.assistant-card .progress-fill {
+  background: #F5B82E;
+}
+.assistant-card .progress-track[data-mode="complete"] .progress-fill,
+.assistant-card .progress-track[data-mode="error"] .progress-fill {
+  background: #F5B82E;
+}
+.assistant-card .button {
+  order: 6;
+  margin-top: 16px;
+}
+.assistant-card .button-secondary {
+  border-color: #F6ECD6;
+  color: #F6ECD6;
+}
+
+/* Conversation : bulles « toi » (jaune) et « guide » (crème). */
+.assistant-transcript {
+  padding: 18px 16px 20px;
+}
+.xo-chat-title {
+  margin: 0 0 14px;
+  font-size: 20px;
+}
+.xo-chat {
+  position: relative;
+  margin-bottom: 16px;
+  padding: 12px 12px 14px;
+  border-radius: 22px;
+}
+.xo-chat--me {
+  margin-left: 18px;
+  background: #F5B82E;
+  border-bottom-right-radius: 6px;
+}
+.xo-chat--guide {
+  margin-right: 18px;
+  background: #D9D3E8;
+  border-bottom-left-radius: 6px;
+}
+.xo-chat-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: #161A3D;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.xo-chat-who .xo-icon {
+  width: 20px;
+  height: 20px;
+}
+.xo-chat textarea {
+  width: 100%;
+  border: 2px solid #161A3D;
+  border-radius: 14px;
+  background: #F6ECD6;
+  color: #161A3D;
+  font-size: 17px;
+}
+.assistant-transcript .assistant-record-consent {
+  margin-bottom: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xo-drawer-scrim,
+  .xo-drawer {
+    animation: none;
+  }
+  .assistant-card .mic-button::before,
+  .assistant-card .mic-button::after {
+    animation: none;
+  }
+}

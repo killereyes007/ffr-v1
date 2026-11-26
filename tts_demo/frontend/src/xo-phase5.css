@@ -1,0 +1,451 @@
+/*
+  Phase 5 : profil, mes contributions, espace experts. Palette Xó + vert feuille.
+*/
+
+/* ---------- Écrans simples (profil, contributions) ---------- */
+.xo-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  padding-bottom: 20px;
+  color: #F6ECD6;
+}
+.xo-screen .xo-back {
+  align-self: flex-start;
+}
+.xo-screen-title {
+  margin: 0;
+  color: #F6ECD6;
+  font-size: 30px;
+  text-shadow: 0 5px 0 #0B0D22;
+}
+.xo-screen-sub {
+  margin: -6px 0 0;
+  color: #D9D3E8;
+  font-size: 15px;
+  font-weight: 600;
+}
+.xo-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px 16px;
+}
+.xo-panel h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.xo-panel .story-copy {
+  margin: 0;
+  font-size: 15px;
+}
+.xo-pseudo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 20px;
+  font-weight: 800;
+}
+.xo-pseudo .xo-icon {
+  color: #F5B82E;
+}
+
+.xo-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.xo-segment button {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px solid #161A3D;
+  border-radius: 999px;
+  background: #F6ECD6;
+  color: #161A3D;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0B0D22;
+}
+.xo-segment button.is-on {
+  background: #F5B82E;
+  box-shadow: none;
+  transform: translateY(4px);
+}
+
+.xo-consent-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.xo-consent-list li,
+.xo-consent-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  color: #161A3D;
+  font-size: 15px;
+  font-weight: 600;
+}
+.xo-consent-list .xo-icon {
+  flex: none;
+  padding: 3px;
+  border-radius: 50%;
+  background: #8CCB6A;
+  color: #161A3D;
+}
+.xo-consent-list input[type="checkbox"] {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+.xo-consent-list em {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #F5B82E;
+  color: #161A3D;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.xo-danger {
+  border-color: #9A3412;
+  color: #9A3412;
+}
+.xo-danger-fill {
+  background: #E0592A;
+  color: #161A3D;
+}
+.xo-confirm {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 2px solid #9A3412;
+  border-radius: 18px;
+  background: #F6ECD6;
+}
+.xo-confirm p {
+  margin: 0;
+  color: #161A3D;
+  font-size: 15px;
+  font-weight: 700;
+}
+.xo-panel .button .xo-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------- Mes contributions ---------- */
+.xo-contribs {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.xo-contrib {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: #F6ECD6;
+  color: #161A3D;
+  box-shadow: 0 5px 0 #0B0D22;
+}
+.xo-contrib strong {
+  display: block;
+  font-size: 15px;
+}
+.xo-contrib small {
+  color: #4A4E78;
+  font-size: 13px;
+  font-weight: 600;
+}
+.xo-legend {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.xo-legend li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.xo-legend small {
+  color: #4A4E78;
+  font-size: 13px;
+  font-weight: 600;
+}
+.xo-empty {
+  justify-items: center;
+  text-align: center;
+}
+.xo-empty > .xo-icon {
+  width: 56px;
+  height: 56px;
+  padding: 12px;
+  border-radius: 50%;
+  background: #8CCB6A;
+  color: #161A3D;
+}
+
+/* ---------- Espace experts ---------- */
+.xo-exp {
+  min-height: 100vh;
+}
+.xo-exp-head {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 14px;
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  padding: 20px 16px 8px;
+}
+.xo-exp-h1 {
+  font-size: clamp(24px, 5vw, 36px);
+}
+.xo-exp-sub {
+  margin: 4px 0 0;
+  color: #D9D3E8;
+  font-weight: 700;
+}
+.xo-exp-demo {
+  width: min(1200px, calc(100% - 32px));
+  margin: 8px auto 0;
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: #F5B82E;
+  color: #161A3D;
+  font-size: 14px;
+  font-weight: 800;
+}
+.xo-exp-grid {
+  display: grid;
+  gap: 18px;
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  padding: 18px 16px 40px;
+}
+@media (min-width: 900px) {
+  .xo-exp-grid {
+    grid-template-columns: 260px minmax(0, 1fr) 300px;
+    align-items: start;
+  }
+}
+.xo-exp-col {
+  padding: 16px;
+  border: 2px solid #3A4290;
+  border-radius: 24px;
+  background: #232A63;
+}
+.xo-exp-h2 {
+  margin: 0 0 12px;
+  color: #F5B82E;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+.xo-exp-h3 {
+  margin: 18px 0 6px;
+  color: #F6ECD6;
+  font-size: 15px;
+  font-weight: 800;
+}
+.xo-exp-help {
+  margin: 0 0 8px;
+  color: #B9B6D3;
+  font-size: 13px;
+}
+.xo-exp-queue,
+.xo-exp-avis {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.xo-exp-queue button {
+  display: grid;
+  width: 100%;
+  min-height: 64px;
+  gap: 2px;
+  justify-items: start;
+  padding: 10px 14px;
+  border: 2px solid #3A4290;
+  border-radius: 18px;
+  background: #161A3D;
+  color: #F6ECD6;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.xo-exp-queue button.is-current {
+  border-color: #F5B82E;
+}
+.xo-exp-queue small {
+  color: #B9B6D3;
+}
+.xo-exp-french {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 800;
+}
+.xo-exp-audio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.xo-exp-wavebar {
+  height: 10px;
+  flex: 1;
+  min-width: 80px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, #F5B82E 0 4px, transparent 4px 9px);
+  opacity: 0.6;
+}
+.xo-exp-audio small {
+  color: #B9B6D3;
+}
+.xo-exp .xo-syllable {
+  cursor: pointer;
+  font-family: "Noto Sans", sans-serif;
+}
+.xo-exp .xo-syllable--uncertain {
+  font-family: "Noto Sans", sans-serif;
+}
+.xo-exp-textarea {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border: 2px solid #F6ECD6;
+  border-radius: 16px;
+  background: #F6ECD6;
+  color: #161A3D;
+  font-size: 20px;
+}
+.xo-exp .fon-keyboard {
+  margin-bottom: 14px;
+}
+.xo-exp .fon-key {
+  min-width: 48px;
+  min-height: 48px;
+  border: 2px solid #0B0D22;
+  border-radius: 12px;
+  background: #F5B82E;
+  color: #161A3D;
+  font-family: "Noto Sans", sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  box-shadow: 0 3px 0 #0B0D22;
+}
+.xo-exp .fon-tone-drawer {
+  background: #161A3D;
+  border: 2px solid #3A4290;
+}
+.xo-exp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.xo-exp-actions kbd {
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: rgba(22, 26, 61, 0.15);
+  font-family: "Noto Sans", sans-serif;
+  font-size: 12px;
+}
+.xo-btn--secondary kbd {
+  background: rgba(246, 236, 214, 0.2);
+}
+.xo-exp-reject {
+  border-color: #E0592A;
+  color: #E0592A;
+}
+.xo-exp-avis .xo-sticker {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+}
+.xo-exp-avis .xo-sticker p {
+  font-size: 14px;
+}
+.xo-verdict {
+  justify-self: start;
+  padding: 2px 12px;
+  border-radius: 999px;
+  border: 2px solid #161A3D;
+  font-size: 13px;
+  font-weight: 800;
+}
+.xo-verdict[data-verdict="valider"] {
+  background: #8CCB6A;
+}
+.xo-verdict[data-verdict="corriger"] {
+  background: #F5B82E;
+}
+.xo-verdict[data-verdict="rejeter"] {
+  border-color: #9A3412;
+  color: #9A3412;
+}
+.xo-verdict[data-verdict="attente"] {
+  background: #D9D3E8;
+}
+.xo-exp-consensus {
+  margin: 12px 0 0;
+  color: #D9D3E8;
+  font-size: 14px;
+  font-weight: 700;
+}
+.xo-exp-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 28px;
+  left: 16px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: #8CCB6A;
+  color: #161A3D;
+  font-weight: 800;
+  text-align: center;
+  box-shadow: 0 5px 0 #0B0D22;
+}
+
+/* Cibles tactiles >= 48 px (vérification phase 6) */
+.difficulty-chip,
+.history-toggle {
+  min-height: 48px;
+}
+.difficulty-chip {
+  padding: 0 16px;
+}
+
+.choice {
+  gap: 10px;
+}
+.choice-index {
+  flex: none;
+  width: auto;
+  min-width: 0;
+  padding: 3px 9px;
+  white-space: nowrap;
+  border-radius: 999px;
+}

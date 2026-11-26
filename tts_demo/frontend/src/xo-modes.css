@@ -1,0 +1,239 @@
+/*
+  Mode clair (« feuilles et crème »). Le mode sombre est le design de base ;
+  ici on ne surcharge que ce qui est posé directement sur le fond d'écran.
+  Les blocs indigo (progression, assistant, menu, passage de niveau) restent
+  indigo : ce sont des « autocollants » foncés sur fond clair.
+
+  Fond #F6ECD6 · cartes #FFFBF2 + contour indigo 2 px · texte #161A3D / #4A4E78
+  Alerte et accent sur clair : #9A3412 (jamais le jaune ni le vert clair comme texte).
+*/
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  background: #F6ECD6;
+  color: #161A3D;
+  --color-bg: #F6ECD6;
+  --color-heading: #161A3D;
+  --color-text: #161A3D;
+  --color-text-secondary: #4A4E78;
+  --color-text-muted: #4A4E78;
+  --color-border: #B9B6D3;
+  --color-border-active: #161A3D;
+  --color-primary: #9A3412;
+  --color-primary-hover: #161A3D;
+}
+
+:root[data-theme="light"] body {
+  background: #D9D3E8;
+}
+:root[data-theme="light"] .shell {
+  border-color: #161A3D;
+  background: #F6ECD6;
+  color: #161A3D;
+  box-shadow: 0 24px 60px rgba(22, 26, 61, 0.28);
+  --color-heading: #161A3D;
+  --color-text: #161A3D;
+  --color-text-secondary: #4A4E78;
+  --color-text-muted: #4A4E78;
+  --color-border: #B9B6D3;
+  --color-border-active: #161A3D;
+  --color-primary: #9A3412;
+  --color-primary-hover: #161A3D;
+}
+:root[data-theme="light"] .shell:has(.xo-stage) {
+  border-color: #161A3D;
+  background: #F6ECD6;
+}
+:root[data-theme="light"] .phone-status,
+:root[data-theme="light"] .shell:has(.xo-stage) .phone-status {
+  color: #4A4E78;
+}
+
+/* Cartes : plus claires que le fond, contour indigo */
+:root[data-theme="light"] .card:not(.assistant-card),
+:root[data-theme="light"] .xo-dcard:not(.xo-dcard--locked),
+:root[data-theme="light"] .xo-contrib,
+:root[data-theme="light"] .xo-home-step:not(.xo-home-step--yellow):not(.xo-home-step--leaf),
+:root[data-theme="light"] .welcome-action,
+:root[data-theme="light"] .dialogue-box,
+:root[data-theme="light"] .choice:not(.is-selected) {
+  background: #FFFBF2;
+  border: 2px solid #161A3D;
+}
+:root[data-theme="light"] .xo-dcard:not(.xo-dcard--locked),
+:root[data-theme="light"] .xo-contrib,
+:root[data-theme="light"] .xo-home-step {
+  box-shadow: 0 5px 0 #161A3D;
+}
+:root[data-theme="light"] .card:not(.assistant-card) {
+  box-shadow: 0 6px 0 #161A3D;
+}
+:root[data-theme="light"] .xo-dcard--locked {
+  border-color: #161A3D;
+}
+:root[data-theme="light"] .phone-nav.xo-nav {
+  border-top: 2px solid #161A3D;
+  background: #FFFBF2;
+}
+:root[data-theme="light"] .xo-write {
+  background: #D9D3E8;
+}
+
+/* Boutons : l'ombre dure devient indigo, plus lisible sur crème */
+:root[data-theme="light"] .button,
+:root[data-theme="light"] .xo-home-play,
+:root[data-theme="light"] .xo-menu-btn,
+:root[data-theme="light"] .xo-btn {
+  box-shadow: 0 5px 0 #161A3D;
+}
+:root[data-theme="light"] .button:active:not(:disabled),
+:root[data-theme="light"] .xo-home-play:active,
+:root[data-theme="light"] .xo-menu-btn:active {
+  box-shadow: 0 0 0 #161A3D;
+}
+:root[data-theme="light"] .button-secondary {
+  box-shadow: none;
+}
+
+/* Texte posé directement sur le fond clair : cream -> indigo */
+:root[data-theme="light"] .xo-home,
+:root[data-theme="light"] .xo-play,
+:root[data-theme="light"] .xo-screen,
+:root[data-theme="light"] .xo-stage {
+  color: #161A3D;
+}
+:root[data-theme="light"] .xo-home-title,
+:root[data-theme="light"] .xo-home-h2,
+:root[data-theme="light"] .xo-play-h2,
+:root[data-theme="light"] .xo-screen-title {
+  color: #161A3D;
+  text-shadow: 0 5px 0 #F5B82E;
+}
+:root[data-theme="light"] .xo-home-h2,
+:root[data-theme="light"] .xo-play-h2 {
+  text-shadow: none;
+}
+:root[data-theme="light"] .xo-home-title span {
+  color: #9A3412;
+}
+:root[data-theme="light"] .xo-home-lead,
+:root[data-theme="light"] .xo-screen-sub,
+:root[data-theme="light"] .xo-home-note {
+  color: #4A4E78;
+}
+:root[data-theme="light"] .xo-home-link {
+  color: #161A3D;
+}
+:root[data-theme="light"] .xo-home-assistant,
+:root[data-theme="light"] .xo-free {
+  border-color: #161A3D;
+  color: #161A3D;
+}
+:root[data-theme="light"] .xo-home-assistant small,
+:root[data-theme="light"] .xo-free small {
+  color: #4A4E78;
+}
+:root[data-theme="light"] .xo-home-assistant:hover {
+  background: rgba(22, 26, 61, 0.08);
+}
+:root[data-theme="light"] .xo-back {
+  border-color: #161A3D;
+  color: #161A3D;
+}
+:root[data-theme="light"] .xo-home :focus-visible,
+:root[data-theme="light"] .xo-back:focus-visible {
+  outline-color: #161A3D;
+}
+:root[data-theme="light"] .xo-home .xo-home-play:focus-visible {
+  outline-color: #161A3D;
+}
+:root[data-theme="light"] .xo-zigzag,
+:root[data-theme="light"] .xo-zigzag--leaf {
+  border-top: 2px solid #161A3D;
+  border-bottom: 2px solid #161A3D;
+}
+:root[data-theme="light"] .shell header {
+  border-bottom-color: #161A3D;
+}
+:root[data-theme="light"] .shell header .brand strong {
+  color: #161A3D;
+}
+:root[data-theme="light"] .shell header .brand span {
+  color: #4A4E78;
+}
+
+/* Page Jouer : les blocs foncés gardent leur texte clair */
+:root[data-theme="light"] .xo-hud,
+:root[data-theme="light"] .xo-hud *:not(.xo-level):not(.xo-level *) {
+  color: #F6ECD6;
+}
+:root[data-theme="light"] .xo-hud .xo-hud-next {
+  color: #D9D3E8;
+}
+:root[data-theme="light"] .xo-hud .xo-level,
+:root[data-theme="light"] .xo-hud .xo-level * {
+  color: #161A3D;
+}
+:root[data-theme="light"] .xo-hud .xo-level b {
+  color: #F5B82E;
+}
+:root[data-theme="light"] .xo-hud .xo-chip .xo-icon {
+  color: #F5B82E;
+}
+:root[data-theme="light"] .xo-hud .xo-progress > span {
+  background: #8CCB6A;
+}
+:root[data-theme="light"] .xo-daily .button {
+  color: #F6ECD6;
+}
+
+/* Onboarding en clair */
+:root[data-theme="light"] .xo-stage .onboarding-card {
+  border: 2px solid #161A3D;
+  background: #FFFBF2;
+  box-shadow: 0 6px 0 #161A3D;
+}
+:root[data-theme="light"] .xo-stage .xo-zigzag {
+  border-top: 0;
+}
+
+/* Assistant : la carte reste indigo ; les bulles de conversation restent lisibles */
+:root[data-theme="light"] .assistant-screen > .xo-back {
+  color: #161A3D;
+}
+:root[data-theme="light"] .assistant-card,
+:root[data-theme="light"] .assistant-card * {
+  --color-text: #F6ECD6;
+}
+
+/* Menu tiroir et passage de niveau : toujours indigo */
+:root[data-theme="light"] .xo-drawer {
+  border-left-color: #161A3D;
+}
+
+/* Sélecteur d'apparence */
+.xo-theme {
+  display: grid;
+  gap: 8px;
+  margin: 6px 18px 0;
+}
+.xo-theme-label {
+  color: #D9D3E8;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.xo-segment--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.xo-segment--3 button {
+  min-height: 56px;
+  gap: 6px;
+  padding: 0 6px;
+  font-size: 14px;
+}
+.xo-segment--3 .xo-icon {
+  width: 20px;
+  height: 20px;
+}

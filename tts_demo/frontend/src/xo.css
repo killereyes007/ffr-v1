@@ -1,0 +1,458 @@
+/*
+  Direction artistique « Xó » — fondations (phase 2).
+  Ajoute des tokens --xo-* et des composants .xo-* SANS toucher à style.css
+  (les variables --color-* existantes restent valables). Polices auto-hébergées.
+*/
+
+@font-face {
+  font-family: "Dela Gothic One";
+  src: url("/game-assets/fonts/dela-gothic-one/dela-gothic-one-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+@font-face {
+  font-family: "Dela Gothic One";
+  src: url("/game-assets/fonts/dela-gothic-one/dela-gothic-one-latin-ext-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+1E00-1EFF;
+}
+/* Sous-ensemble maison : latin + API + diacritiques combinants (tons U+0300-036F). */
+@font-face {
+  font-family: "Noto Sans";
+  src: url("/game-assets/fonts/noto-sans/NotoSans-fon-VF.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Couleurs */
+  --xo-indigo: #161A3D;
+  --xo-surface: #232A63;
+  --xo-border: #3A4290;
+  --xo-cream: #F6ECD6;
+  --xo-text-2: #D9D3E8;
+  --xo-text-3: #B9B6D3;
+  --xo-yellow: #F5B82E;
+  --xo-terracotta: #E0592A;
+  --xo-shadow-color: #0B0D22;
+  --xo-on-cream: #161A3D;
+  --xo-on-cream-muted: #4A4E78;
+  --xo-on-cream-alert: #9A3412;
+
+  /* Polices */
+  --xo-font-title: "Dela Gothic One", "Noto Sans", sans-serif;
+  --xo-font-body: "Noto Sans", system-ui, sans-serif;
+
+  /* Rayons, ombres, espacements, cibles tactiles */
+  --xo-radius-card: 24px;
+  --xo-radius-pill: 999px;
+  --xo-shadow-btn: 0 5px 0 var(--xo-shadow-color);
+  --xo-shadow-card: 0 6px 0 var(--xo-shadow-color);
+  --xo-shadow-title: 0 6px 0 var(--xo-shadow-color);
+  --xo-space-1: 4px;
+  --xo-space-2: 8px;
+  --xo-space-3: 12px;
+  --xo-space-4: 16px;
+  --xo-space-5: 24px;
+  --xo-space-6: 32px;
+  --xo-tap: 48px;
+  --xo-tap-lg: 64px;
+}
+
+/* ---------- Surfaces et typographie ---------- */
+.xo-page {
+  min-height: 100vh;
+  background: var(--xo-indigo);
+  color: var(--xo-cream);
+  font-family: var(--xo-font-body);
+  font-size: 16px;
+  line-height: 1.5;
+}
+.xo-page *,
+.xo-page *::before,
+.xo-page *::after {
+  box-sizing: border-box;
+}
+
+.xo-title {
+  margin: 0;
+  color: var(--xo-cream);
+  font-family: var(--xo-font-title);
+  font-weight: 400;
+  text-transform: uppercase;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  text-shadow: var(--xo-shadow-title);
+}
+/* Le fon ne s'écrit JAMAIS en Dela Gothic One. */
+.xo-fon,
+.xo-fon * {
+  font-family: var(--xo-font-body);
+  font-variant-ligatures: none;
+  text-transform: none;
+  text-shadow: none;
+}
+
+/* ---------- Frise zigzag (CSS pur, sans image) ---------- */
+.xo-zigzag {
+  --zz: 20px;
+  width: 100%;
+  height: var(--zz);
+  background-color: var(--xo-terracotta);
+  background-image:
+    linear-gradient(135deg, var(--xo-yellow) 25%, transparent 25%),
+    linear-gradient(225deg, var(--xo-yellow) 25%, transparent 25%),
+    linear-gradient(315deg, var(--xo-yellow) 25%, transparent 25%),
+    linear-gradient(45deg, var(--xo-yellow) 25%, transparent 25%);
+  background-size: var(--zz) var(--zz);
+  background-position: calc(var(--zz) / 2) 0, calc(var(--zz) / 2) 0, 0 0, 0 0;
+}
+.xo-zigzag--thin {
+  --zz: 12px;
+}
+
+/* ---------- Boutons pilule ---------- */
+.xo-btn {
+  display: inline-flex;
+  min-height: var(--xo-tap);
+  align-items: center;
+  justify-content: center;
+  gap: var(--xo-space-2);
+  padding: 0 var(--xo-space-5);
+  border: 0;
+  border-radius: var(--xo-radius-pill);
+  background: var(--xo-yellow);
+  color: var(--xo-indigo);
+  font-family: var(--xo-font-title);
+  font-size: 16px;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--xo-shadow-btn);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.xo-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 0 var(--xo-shadow-color);
+}
+.xo-btn:active {
+  transform: translateY(5px);
+  box-shadow: 0 0 0 var(--xo-shadow-color);
+}
+.xo-btn--lg {
+  min-height: var(--xo-tap-lg);
+  font-size: 18px;
+}
+.xo-btn--secondary {
+  border: 2px solid var(--xo-cream);
+  background: transparent;
+  color: var(--xo-cream);
+  box-shadow: none;
+}
+.xo-btn--secondary:hover,
+.xo-btn--secondary:active {
+  box-shadow: none;
+  background: rgba(246, 236, 214, 0.1);
+}
+.xo-btn[disabled],
+.xo-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+.xo-btn svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+/* Focus visible : anneau crème + indigo, lisible sur tous les fonds. */
+.xo-page :focus-visible {
+  outline: 3px solid var(--xo-cream);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px var(--xo-indigo);
+}
+
+/* ---------- Carte autocollant ---------- */
+.xo-sticker {
+  --xo-tilt: -3deg;
+  position: relative;
+  padding: var(--xo-space-5);
+  border-radius: var(--xo-radius-card);
+  background: var(--xo-cream);
+  color: var(--xo-on-cream);
+  box-shadow: var(--xo-shadow-card);
+  transform: rotate(var(--xo-tilt));
+}
+.xo-sticker--yellow {
+  background: var(--xo-yellow);
+}
+.xo-sticker--locked {
+  background: var(--xo-text-3);
+  color: var(--xo-on-cream);
+}
+.xo-sticker h3 {
+  margin: 0 0 var(--xo-space-2);
+  font-family: var(--xo-font-title);
+  font-weight: 400;
+  font-size: 18px;
+  text-transform: uppercase;
+}
+.xo-sticker p {
+  margin: 0;
+  color: var(--xo-on-cream-muted);
+}
+.xo-sticker--yellow p {
+  color: var(--xo-indigo);
+}
+.xo-progress {
+  height: 12px;
+  margin-top: var(--xo-space-3);
+  overflow: hidden;
+  border: 2px solid var(--xo-indigo);
+  border-radius: var(--xo-radius-pill);
+  background: var(--xo-cream);
+}
+.xo-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--xo-yellow);
+  border-right: 2px solid var(--xo-indigo);
+}
+
+/* ---------- Badge de niveau ---------- */
+.xo-level {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: var(--xo-space-2);
+  padding: 0 var(--xo-space-4);
+  border-radius: var(--xo-radius-pill);
+  background: var(--xo-yellow);
+  color: var(--xo-indigo);
+  font-family: var(--xo-font-title);
+  font-size: 14px;
+  text-transform: uppercase;
+  box-shadow: 0 3px 0 var(--xo-shadow-color);
+}
+.xo-level b {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--xo-indigo);
+  color: var(--xo-yellow);
+  font-weight: 400;
+}
+.xo-level-frame {
+  display: inline-grid;
+  gap: var(--xo-space-3);
+  padding: var(--xo-space-4) 0;
+  justify-items: center;
+}
+
+/* ---------- Pastille de statut (contributions) ---------- */
+.xo-status {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--xo-space-3);
+  border-radius: var(--xo-radius-pill);
+  border: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--xo-indigo);
+}
+.xo-status::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.xo-status[data-status="recu"] {
+  background: var(--xo-text-2);
+}
+.xo-status[data-status="relecture"] {
+  background: var(--xo-yellow);
+}
+.xo-status[data-status="expert"] {
+  background: var(--xo-terracotta);
+}
+.xo-status[data-status="valide"] {
+  background: var(--xo-indigo);
+  color: var(--xo-cream);
+  border-color: var(--xo-yellow);
+}
+.xo-status[data-status="rejete"] {
+  border-color: var(--xo-on-cream-alert);
+  background: var(--xo-cream);
+  color: var(--xo-on-cream-alert);
+}
+
+/* ---------- Pastille de syllabe ---------- */
+.xo-syllables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--xo-space-2);
+}
+.xo-syllable {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  padding: 0 var(--xo-space-4);
+  border-radius: var(--xo-radius-pill);
+  border: 2px solid var(--xo-border);
+  background: var(--xo-indigo);
+  color: var(--xo-cream);
+  font-family: var(--xo-font-body);
+  font-size: 18px;
+  font-weight: 700;
+}
+.xo-syllable--uncertain {
+  flex-direction: column;
+  justify-content: center;
+  padding: 2px var(--xo-space-4);
+  border: 2px dashed var(--xo-terracotta);
+  background: var(--xo-cream);
+  color: var(--xo-on-cream);
+  line-height: 1.15;
+}
+.xo-syllable--uncertain small {
+  color: var(--xo-on-cream-alert);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------- Bulle de l'assistant ---------- */
+.xo-bubble {
+  position: relative;
+  max-width: 320px;
+  padding: var(--xo-space-3) var(--xo-space-4);
+  border-radius: var(--xo-radius-card);
+  background: var(--xo-cream);
+  color: var(--xo-on-cream);
+  font-weight: 600;
+  box-shadow: var(--xo-shadow-card);
+  transform: rotate(-1.5deg);
+}
+.xo-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -12px;
+  left: 28px;
+  border: 12px solid transparent;
+  border-top-color: var(--xo-cream);
+  border-bottom: 0;
+}
+.xo-bubble-name {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--xo-on-cream-alert);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---------- Micro central + anneaux pulsés ---------- */
+.xo-mic {
+  position: relative;
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--xo-terracotta);
+  color: var(--xo-indigo);
+  cursor: pointer;
+  box-shadow: var(--xo-shadow-btn);
+}
+.xo-mic svg {
+  position: relative;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+}
+.xo-mic::before,
+.xo-mic::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid var(--xo-yellow);
+  opacity: 0;
+  animation: xo-pulse 2s ease-out infinite;
+}
+.xo-mic::after {
+  border-color: var(--xo-terracotta);
+  animation-delay: 1s;
+}
+@keyframes xo-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* ---------- Barres d'ondes sonores ---------- */
+.xo-wave {
+  display: inline-flex;
+  height: 48px;
+  align-items: center;
+  gap: 5px;
+}
+.xo-wave span {
+  width: 6px;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--xo-yellow);
+  transform-origin: center;
+  animation: xo-wave 1s ease-in-out infinite;
+}
+.xo-wave span:nth-child(2n) {
+  animation-delay: -0.3s;
+}
+.xo-wave span:nth-child(3n) {
+  animation-delay: -0.6s;
+}
+.xo-wave span:nth-child(5n) {
+  animation-delay: -0.15s;
+}
+@keyframes xo-wave {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* Animations coupées si l'utilisateur le demande. */
+@media (prefers-reduced-motion: reduce) {
+  .xo-mic::before,
+  .xo-mic::after {
+    animation: none;
+    opacity: 0;
+  }
+  .xo-wave span {
+    animation: none;
+    transform: scaleY(0.6);
+  }
+  .xo-btn {
+    transition: none;
+  }
+}
