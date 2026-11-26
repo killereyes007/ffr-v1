@@ -277,6 +277,28 @@ header .brand strong {
   align-items: stretch;
   gap: 4px;
 }
+/* Carte de phrase qu'on peut glisser pour passer (le défilement vertical reste libre). */
+.xo-record.is-swipeable {
+  touch-action: pan-y;
+  cursor: grab;
+}
+.xo-record.is-swipeable:active {
+  cursor: grabbing;
+}
+.xo-swipe-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  color: #4A4E78;
+  font-size: 12px;
+  font-weight: 700;
+}
+.xo-swipe-hint span {
+  font-size: 16px;
+  line-height: 1;
+}
 .xo-kicker--dark {
   align-self: flex-start;
   background: #161A3D;

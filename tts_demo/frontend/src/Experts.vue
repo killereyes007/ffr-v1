@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import FonKeyboard from "./FonKeyboard.vue";
+import { applyFonKey, type FonKey } from "./fonInput";
 import XoIcon from "./XoIcon.vue";
 import XoLogo from "./XoLogo.vue";
 
@@ -109,19 +110,18 @@ function decide(status: Status) {
   if (next >= 0) current.value = next;
 }
 
-function insertChar(char: string) {
+function onFonKey(key: FonKey) {
   const el = textarea.value;
   const value = item.value.correction;
-  if (!el) {
-    item.value.correction = value + char;
-    return;
-  }
-  const start = el.selectionStart ?? value.length;
-  const end = el.selectionEnd ?? value.length;
-  item.value.correction = (value.slice(0, start) + char + value.slice(end)).normalize("NFC");
+  const start = el?.selectionStart ?? value.length;
+  const end = el?.selectionEnd ?? value.length;
+  const result = applyFonKey(value, start, end, key);
+  if (!result) return;
+  item.value.correction = result.value;
+  if (!el) return;
   requestAnimationFrame(() => {
     el.focus();
-    el.setSelectionRange(start + char.length, start + char.length);
+    el.setSelectionRange(result.cursor, result.cursor);
   });
 }
 
@@ -203,7 +203,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
         <h3 class="xo-exp-h3">Correction</h3>
         <textarea ref="textarea" v-model="item.correction" class="xo-fon xo-exp-textarea" lang="fon" rows="3" placeholder="Écris la version corrigée…"></textarea>
-        <FonKeyboard @insert="insertChar" />
+        <FonKeyboard @key="onFonKey" />
 
         <div class="xo-exp-actions" role="group" aria-label="Décision">
           <button class="xo-btn" type="button" @click="decide('valide')"><XoIcon name="check" /> Valider <kbd>V</kbd></button>

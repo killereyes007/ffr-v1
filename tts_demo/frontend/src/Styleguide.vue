@@ -66,7 +66,7 @@ const statuses = [
     <div class="xo-zigzag" aria-hidden="true" />
     <main class="sg-main">
       <div class="sg-head">
-        <h1 class="xo-title sg-h1">Xó — styleguide</h1>
+        <h1 class="xo-title sg-h1">Xó · styleguide</h1>
         <p class="sg-lead">Fondations de la direction artistique (phase 2). Page interne, non liée à la navigation.</p>
       </div>
 

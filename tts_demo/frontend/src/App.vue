@@ -24,6 +24,8 @@ import XoCube from "./XoCube.vue";
 import XoIcon from "./XoIcon.vue";
 import XoLogo from "./XoLogo.vue";
 import XoLeaf from "./XoLeaf.vue";
+import FonKeyboard from "./FonKeyboard.vue";
+import { applyFonKey, type FonKey } from "./fonInput";
 import { setTheme, themePref, type ThemePref } from "./theme";
 import {
   addContribution,
@@ -512,50 +514,41 @@ function dismissLevelUp() {
 }
 const clock = ref("");
 
-// --- Fon special-character toolbar (shared by the writing-check textarea and
-// the "Ta traduction en fon" field) : inserts at the cursor position of the
-// last-focused fon-capable textarea, never a full replacement keyboard. ---
+// --- Clavier fon (champ d'essai d'écriture et « Ta traduction en fon ») :
+// quand un champ fon a le focus, le clavier fon s'affiche en bas de l'écran à la
+// place du clavier du téléphone (inputmode="none" sur le champ). Un clavier
+// physique reste utilisable sur ordinateur. ---
 
-const fonSpecialLetters = ["Ɖ", "ɖ", "Ɛ", "ɛ", "Ɔ", "ɔ", "Ɣ", "ɣ"];
-const fonBaseVowels = ["a", "e", "ɛ", "i", "o", "ɔ", "u"];
-const fonToneMap: Record<string, string[]> = {
-  a: ["á", "à", "ǎ", "â", "ā"],
-  e: ["é", "è", "ě", "ê", "ē"],
-  i: ["í", "ì", "ǐ", "î", "ī"],
-  o: ["ó", "ò", "ǒ", "ô", "ō"],
-  u: ["ú", "ù", "ǔ", "û", "ū"],
-  "ɛ": ["ɛ́", "ɛ̀", "ɛ̌", "ɛ̂", "ɛ̄"],
-  "ɔ": ["ɔ́", "ɔ̀", "ɔ̌", "ɔ̂", "ɔ̄"],
-};
+const fonKbTarget = ref<HTMLTextAreaElement | null>(null);
 
-const focusedFonInput = ref<HTMLTextAreaElement | null>(null);
-const openTonePicker = ref<string | null>(null);
-
-function trackFonInputFocus(event: FocusEvent) {
-  focusedFonInput.value = event.target as HTMLTextAreaElement;
+function openFonKeyboard(event: FocusEvent) {
+  const el = event.target as HTMLTextAreaElement;
+  fonKbTarget.value = el;
+  void nextTick(() => el.scrollIntoView({ block: "center", behavior: "smooth" }));
 }
 
-function toggleTonePicker(vowel: string) {
-  openTonePicker.value = openTonePicker.value === vowel ? null : vowel;
+function closeFonKeyboard(event: FocusEvent) {
+  if (event.target === fonKbTarget.value) fonKbTarget.value = null;
 }
 
-function insertFonChar(char: string) {
-  const el = focusedFonInput.value;
+function onFonKey(key: FonKey) {
+  const el = fonKbTarget.value;
   if (!el) return;
+  if (key.kind === "close") {
+    el.blur();
+    return;
+  }
   const start = el.selectionStart ?? el.value.length;
   const end = el.selectionEnd ?? el.value.length;
-  const newValue = el.value.slice(0, start) + char + el.value.slice(end);
-  if (el.id === "contribution-fon") {
-    contributionFon.value = newValue;
-  } else if (el.id === "writing-check-input") {
-    writingCheckInput.value = newValue;
-  }
-  const newCursor = start + char.length;
-  openTonePicker.value = null;
-  void nextTick(() => {
-    el.focus();
-    el.setSelectionRange(newCursor, newCursor);
-  });
+  const result = applyFonKey(el.value, start, end, key);
+  if (!result) return;
+  const max = el.maxLength > 0 ? el.maxLength : Infinity;
+  if (result.value.length > max) return;
+  // Écrit dans le champ puis émet « input » : le v-model du champ se met à jour,
+  // quel que soit le champ fon ciblé.
+  el.value = result.value;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  void nextTick(() => el.setSelectionRange(result.cursor, result.cursor));
 }
 
 // --- Contribution zone shared by "Phrase proposée" (mission) and "Ma phrase" (free) modes ---
@@ -933,6 +926,74 @@ function finishDomainItem(contributed: boolean) {
   logEvent("domain_item_complete", { domain_id: domain.id, contributed });
 }
 
+// --- Glisser la carte de la phrase (gauche ou droite) pour la passer. Le geste
+// ne démarre pas sur un bouton, un champ ou un lecteur audio, et reste
+// désactivé pendant un enregistrement ou un envoi. ---
+const SWIPE_THRESHOLD = 90;
+const swipeDx = ref(0);
+const swipeLeaving = ref(false);
+let swipeStart: { x: number; y: number; id: number } | null = null;
+let swipeHorizontal = false;
+
+const canSwipeSkip = computed(
+  () =>
+    contributionMode.value === "domain" &&
+    !!selectedItem.value &&
+    !itemFinished.value &&
+    !contributionRecording.value &&
+    !contributionSaving.value,
+);
+const swipeStyle = computed(() => {
+  if (!swipeDx.value && !swipeLeaving.value) return undefined;
+  return {
+    transform: `translateX(${swipeDx.value}px) rotate(${swipeDx.value / 25}deg)`,
+    opacity: String(Math.max(0.35, 1 - Math.abs(swipeDx.value) / 420)),
+    transition: swipeStart ? "none" : "transform 0.22s ease, opacity 0.22s ease",
+  };
+});
+
+function onSwipeDown(event: PointerEvent) {
+  if (!canSwipeSkip.value || swipeLeaving.value || event.button > 0) return;
+  const target = event.target as HTMLElement;
+  if (target.closest("button, a, textarea, input, select, audio, label, .xo-write")) return;
+  swipeStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
+  swipeHorizontal = false;
+}
+
+function onSwipeMove(event: PointerEvent) {
+  if (!swipeStart || event.pointerId !== swipeStart.id) return;
+  const dx = event.clientX - swipeStart.x;
+  const dy = event.clientY - swipeStart.y;
+  if (!swipeHorizontal) {
+    if (Math.abs(dx) < 10) return;
+    // Geste surtout vertical : on laisse défiler la page.
+    if (Math.abs(dy) > Math.abs(dx)) {
+      swipeStart = null;
+      return;
+    }
+    swipeHorizontal = true;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+  swipeDx.value = dx;
+}
+
+function onSwipeEnd() {
+  if (!swipeStart) return;
+  swipeStart = null;
+  const dx = swipeDx.value;
+  if (swipeHorizontal && Math.abs(dx) >= SWIPE_THRESHOLD && canSwipeSkip.value) {
+    swipeLeaving.value = true;
+    swipeDx.value = Math.sign(dx) * 520;
+    window.setTimeout(() => {
+      finishDomainItem(false);
+      swipeDx.value = 0;
+      swipeLeaving.value = false;
+    }, 220);
+  } else {
+    swipeDx.value = 0;
+  }
+}
+
 function classifySaveFailure(error: unknown): "network" | "server_error" | "validation" {
   if (error instanceof TypeError) return "network";
   const status = (error as { status?: number } | null)?.status;
@@ -1034,6 +1095,14 @@ type GuideState = "idle" | "listening" | "speaking" | "processing";
 type ProgressMode = "hidden" | "recording" | "indeterminate" | "complete" | "error";
 
 const assistantLanguage = ref<"Français" | "Fon">("Français");
+// La transcription de l'assistant n'est en fon que si la langue parlée est
+// « Fon » : si la langue change alors que ce champ a le focus, on ouvre ou on
+// ferme le clavier fon en conséquence.
+watch(assistantLanguage, (language) => {
+  const el = document.getElementById("assistant-transcript") as HTMLTextAreaElement | null;
+  if (!el || document.activeElement !== el) return;
+  fonKbTarget.value = language === "Fon" ? el : null;
+});
 const assistantGuideState = ref<GuideState>("idle");
 const assistantRecording = ref(false);
 const assistantMicDisabled = ref(false);
@@ -1605,56 +1674,26 @@ onBeforeUnmount(() => {
         <h1>Comment veux-tu contribuer ?</h1>
         <p class="story-copy">
           Le fon se parle avant tout à l'oral. Si tu es plus à l'aise pour parler que pour
-          écrire, tu peux contribuer uniquement avec ta voix — le champ d'écriture ne te sera
+          écrire, tu peux contribuer uniquement avec ta voix : le champ d'écriture ne te sera
           jamais demandé.
         </p>
         <span class="prompt-label">Essaie d'écrire une traduction</span>
         <p class="locked-text">{{ writingCheckSample }}</p>
         <label class="prompt-label" for="writing-check-input">Essaie d'écrire ta traduction en fon</label>
-        <div class="fon-keyboard" role="group" aria-label="Caractères spéciaux du fon">
-          <div class="fon-keyboard-row">
-            <button
-              v-for="letter in fonSpecialLetters"
-              :key="'letter-' + letter"
-              type="button"
-              class="fon-key"
-              @mousedown.prevent
-              @click="insertFonChar(letter)"
-            >{{ letter }}</button>
-          </div>
-          <div class="fon-keyboard-row">
-            <div v-for="vowel in fonBaseVowels" :key="'vowel-' + vowel" class="fon-vowel-wrap">
-              <button
-                type="button"
-                class="fon-key"
-                :class="{ 'is-open': openTonePicker === vowel }"
-                @mousedown.prevent
-                @click="toggleTonePicker(vowel)"
-              >{{ vowel }}</button>
-              <div v-if="openTonePicker === vowel" class="fon-tone-drawer">
-                <button type="button" class="fon-key fon-key-tone" @mousedown.prevent @click="insertFonChar(vowel)">{{ vowel }}</button>
-                <button
-                  v-for="tone in fonToneMap[vowel]"
-                  :key="tone"
-                  type="button"
-                  class="fon-key fon-key-tone"
-                  @mousedown.prevent
-                  @click="insertFonChar(tone)"
-                >{{ tone }}</button>
-              </div>
-            </div>
-          </div>
-        </div>
         <textarea
           id="writing-check-input"
           v-model="writingCheckInput"
+          class="xo-fon"
+          lang="fon"
+          inputmode="none"
           rows="2"
           maxlength="200"
-          placeholder="Essaie, même si tu n'es pas sûr·e…"
-          @focus="trackFonInputFocus"
+          placeholder="Touche ici pour ouvrir le clavier fon…"
+          @focus="openFonKeyboard"
+          @blur="closeFonKeyboard"
         ></textarea>
         <p class="hint">
-          Ceci n'est pas noté ni corrigé automatiquement — personne ne vérifie l'orthographe,
+          Ceci n'est pas noté ni corrigé automatiquement : personne ne vérifie l'orthographe,
           c'est juste pour t'aider à savoir ce qui te convient le mieux.
         </p>
         <p v-if="writingCheckNudge" class="hint" role="status">
@@ -1680,17 +1719,6 @@ onBeforeUnmount(() => {
           <span>Bénin · une aventure en fon</span>
         </div>
       </div>
-      <button
-        class="xo-menu-btn"
-        type="button"
-        aria-label="Ouvrir le menu"
-        aria-haspopup="dialog"
-        :aria-expanded="menuOpen"
-        aria-controls="xo-drawer"
-        @click="openMenu"
-      >
-        <XoIcon name="menu" />
-      </button>
     </header>
 
     <main v-if="activeScreen === 'home'" class="welcome-screen xo-home">
@@ -1997,11 +2025,20 @@ onBeforeUnmount(() => {
         v-if="contributionMode === 'free' || (selectedItem && !itemFinished)"
         id="contribution"
         class="card task xo-record"
+        :class="{ 'is-swipeable': canSwipeSkip }"
+        :style="swipeStyle"
+        @pointerdown="onSwipeDown"
+        @pointermove="onSwipeMove"
+        @pointerup="onSwipeEnd"
+        @pointercancel="onSwipeEnd"
       >
         <span class="xo-kicker xo-kicker--dark">{{ contributionMode === "domain" ? "Mission · Dire" : "Phrase libre" }}</span>
         <template v-if="contributionMode === 'domain'">
           <p class="xo-context">{{ selectedDomain?.label }}</p>
           <p class="xo-phrase">{{ contributionFrench }}</p>
+          <p v-if="canSwipeSkip" class="xo-swipe-hint" aria-hidden="true">
+            <span>‹</span> Glisse la carte pour passer cette phrase <span>›</span>
+          </p>
         </template>
         <template v-else>
           <label class="prompt-label" for="contribution-french">Ta phrase en français</label>
@@ -2056,51 +2093,19 @@ onBeforeUnmount(() => {
           </template>
           <template v-else>
             <label class="prompt-label prompt-label-dominant" for="contribution-fon">Ta traduction en fon</label>
-            <div class="fon-keyboard" role="group" aria-label="Caractères spéciaux du fon">
-            <div class="fon-keyboard-row">
-              <button
-                v-for="letter in fonSpecialLetters"
-                :key="'letter-' + letter"
-                type="button"
-                class="fon-key"
-                @mousedown.prevent
-                @click="insertFonChar(letter)"
-              >{{ letter }}</button>
-            </div>
-            <div class="fon-keyboard-row">
-              <div v-for="vowel in fonBaseVowels" :key="'vowel-' + vowel" class="fon-vowel-wrap">
-                <button
-                  type="button"
-                  class="fon-key"
-                  :class="{ 'is-open': openTonePicker === vowel }"
-                  @mousedown.prevent
-                  @click="toggleTonePicker(vowel)"
-                >{{ vowel }}</button>
-                <div v-if="openTonePicker === vowel" class="fon-tone-drawer">
-                  <button type="button" class="fon-key fon-key-tone" @mousedown.prevent @click="insertFonChar(vowel)">{{ vowel }}</button>
-                  <button
-                    v-for="tone in fonToneMap[vowel]"
-                    :key="tone"
-                    type="button"
-                    class="fon-key fon-key-tone"
-                    @mousedown.prevent
-                    @click="insertFonChar(tone)"
-                  >{{ tone }}</button>
-                </div>
-              </div>
-            </div>
-          </div>
             <div class="xo-fon-field">
               <textarea
                 id="contribution-fon"
                 v-model="contributionFon"
                 class="xo-fon"
                 lang="fon"
+                inputmode="none"
                 rows="3"
                 maxlength="500"
-                placeholder="Écris la phrase telle que tu l'as dite…"
+                placeholder="Touche ici pour ouvrir le clavier fon…"
                 :disabled="contributionRecording || contributionSaving"
-                @focus="trackFonInputFocus"
+                @focus="openFonKeyboard"
+                @blur="closeFonKeyboard"
               ></textarea>
               <button
                 class="button button-secondary xo-listen"
@@ -2293,8 +2298,11 @@ onBeforeUnmount(() => {
         <button class="button" type="button" @click="enterApp('game')">Jouer</button>
       </section>
 
-      <section class="card xo-panel">
-        <h2>Les statuts</h2>
+      <details class="xo-legend-box">
+        <summary>
+          <span>Que veulent dire les statuts ?</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        </summary>
         <ul class="xo-legend">
           <li v-for="st in statusLegend" :key="st.key">
             <span class="xo-status" :data-status="st.key">{{ st.label }}</span>
@@ -2302,7 +2310,7 @@ onBeforeUnmount(() => {
           </li>
         </ul>
         <p class="hint">Pour l'instant, tout s'affiche « Reçu » : le suivi des relectures arrive bientôt.</p>
-      </section>
+      </details>
     </main>
 
     <main v-else-if="activeScreen === 'assistant'" class="assistant-screen">
@@ -2413,8 +2421,13 @@ onBeforeUnmount(() => {
           <textarea
             id="assistant-transcript"
             v-model="assistantTranscript"
+            :class="{ 'xo-fon': assistantLanguage === 'Fon' }"
+            :lang="assistantLanguage === 'Fon' ? 'fon' : 'fr'"
+            :inputmode="assistantLanguage === 'Fon' ? 'none' : 'text'"
             rows="3"
             placeholder="Ta phrase apparaîtra ici après la reconnaissance."
+            @focus="assistantLanguage === 'Fon' && openFonKeyboard($event)"
+            @blur="closeFonKeyboard"
           ></textarea>
         </div>
         <div class="xo-chat xo-chat--guide">
@@ -2424,8 +2437,11 @@ onBeforeUnmount(() => {
             v-model="assistantAnswer"
             class="xo-fon"
             lang="fon"
+            inputmode="none"
             rows="4"
             placeholder="La réponse en fon apparaîtra ici. Tu peux la corriger."
+            @focus="openFonKeyboard"
+            @blur="closeFonKeyboard"
           ></textarea>
         </div>
         <audio
@@ -2448,7 +2464,7 @@ onBeforeUnmount(() => {
       </section>
     </main>
 
-    <nav class="phone-nav xo-nav" aria-label="Navigation du jeu">
+    <nav v-show="!fonKbTarget" class="phone-nav xo-nav" aria-label="Navigation du jeu">
       <button
         class="phone-nav-item"
         :class="{ 'is-active': activeScreen === 'home' }"
@@ -2479,7 +2495,14 @@ onBeforeUnmount(() => {
         <XoIcon name="chat" />
         <span>Guide</span>
       </button>
-      <button class="phone-nav-item" type="button" aria-haspopup="dialog" @click="openMenu">
+      <button
+        class="phone-nav-item"
+        type="button"
+        aria-haspopup="dialog"
+        :aria-expanded="menuOpen"
+        aria-controls="xo-drawer"
+        @click="openMenu"
+      >
         <XoIcon name="menu" />
         <span>Menu</span>
       </button>
@@ -2548,5 +2571,8 @@ onBeforeUnmount(() => {
       </div>
     </div>
     </template>
+
+    <!-- Clavier fon : remplace le clavier du téléphone quand un champ fon a le focus. -->
+    <FonKeyboard v-if="fonKbTarget" docked @key="onFonKey" />
   </div>
 </template>
