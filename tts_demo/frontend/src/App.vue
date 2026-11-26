@@ -531,6 +531,50 @@ function closeFonKeyboard(event: FocusEvent) {
   if (event.target === fonKbTarget.value) fonKbTarget.value = null;
 }
 
+// Bouton « Réécouter » du clavier : l'audio lié au champ en cours d'écriture
+// (ta voix pour ta traduction, la réponse du guide pour sa correction).
+const fonKbListening = ref(false);
+let fonKbAudio: HTMLAudioElement | null = null;
+const fonKbListenUrl = computed(() => {
+  const id = fonKbTarget.value?.id;
+  if (id === "contribution-fon") return contributionAudioUrl.value;
+  if (id === "assistant-answer") return assistantResponseAudioUrl.value;
+  return null;
+});
+
+function stopFonKbAudio() {
+  fonKbAudio?.pause();
+  fonKbListening.value = false;
+}
+
+function toggleFonKbListen() {
+  toggleListen(fonKbListenUrl.value);
+}
+
+function toggleContributionVoice() {
+  toggleListen(contributionAudioUrl.value);
+}
+
+function toggleListen(url: string | null) {
+  if (!url) return;
+  if (fonKbListening.value) {
+    stopFonKbAudio();
+    return;
+  }
+  if (!fonKbAudio) {
+    fonKbAudio = new Audio();
+    fonKbAudio.addEventListener("ended", () => (fonKbListening.value = false));
+  }
+  if (fonKbAudio.src !== url) fonKbAudio.src = url;
+  fonKbAudio.currentTime = 0;
+  fonKbListening.value = true;
+  void fonKbAudio.play().catch(() => (fonKbListening.value = false));
+}
+
+watch(fonKbTarget, (el) => {
+  if (!el) stopFonKbAudio();
+});
+
 function onFonKey(key: FonKey) {
   const el = fonKbTarget.value;
   if (!el) return;
@@ -2107,15 +2151,28 @@ onBeforeUnmount(() => {
                 @focus="openFonKeyboard"
                 @blur="closeFonKeyboard"
               ></textarea>
-              <button
-                class="button button-secondary xo-listen"
-                type="button"
-                :disabled="contributionPlayingAi || !contributionFon.trim()"
-                aria-label="Écouter ce que tu as écrit"
-                @click="playContributionAiVoice"
-              >
-                <XoIcon name="ear" /> Écouter
-              </button>
+              <div class="xo-listen-row">
+                <button
+                  class="button button-secondary xo-listen"
+                  type="button"
+                  :disabled="!contributionAudioUrl"
+                  :aria-pressed="fonKbListening"
+                  aria-label="Réécouter ton enregistrement"
+                  @pointerdown.prevent
+                  @click="toggleContributionVoice"
+                >
+                  <XoIcon name="play" /> Ma voix
+                </button>
+                <button
+                  class="button button-secondary xo-listen"
+                  type="button"
+                  :disabled="contributionPlayingAi || !contributionFon.trim()"
+                  aria-label="Écouter ce que tu as écrit"
+                  @click="playContributionAiVoice"
+                >
+                  <XoIcon name="ear" /> Écouter l'écrit
+                </button>
+              </div>
             </div>
             <audio
               v-if="contributionAiAudioUrl"
@@ -2573,6 +2630,13 @@ onBeforeUnmount(() => {
     </template>
 
     <!-- Clavier fon : remplace le clavier du téléphone quand un champ fon a le focus. -->
-    <FonKeyboard v-if="fonKbTarget" docked @key="onFonKey" />
+    <FonKeyboard
+      v-if="fonKbTarget"
+      docked
+      :can-listen="!!fonKbListenUrl"
+      :listening="fonKbListening"
+      @key="onFonKey"
+      @listen="toggleFonKbListen"
+    />
   </div>
 </template>

@@ -388,6 +388,11 @@ header .brand strong {
   display: grid;
   gap: 10px;
 }
+.xo-listen-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
 .xo-record textarea {
   border: 2px solid #161A3D;
   border-radius: 16px;
