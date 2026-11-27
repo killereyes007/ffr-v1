@@ -1,0 +1,245 @@
+/*
+  Thème « Xó » appliqué à toute l'application : on remappe les variables
+  existantes (--color-*) vers la palette EXACTE du prompt de design.
+  Aucune autre couleur que celles du prompt n'est utilisée ici.
+
+    indigo #161A3D · surface #232A63 · bordure sombre #3A4290
+    crème #F6ECD6 · texte 2 #D9D3E8 · mentions #B9B6D3
+    jaune #F5B82E · terre cuite #E0592A · ombre dure #0B0D22
+    sur crème : #161A3D, atténué #4A4E78, alerte #9A3412
+
+  Règle : sur jaune et terre cuite, le texte est toujours indigo.
+*/
+
+:root {
+  color-scheme: dark;
+  background: #161A3D;
+  color: #161A3D;
+  font-family: "Noto Sans", system-ui, sans-serif;
+
+  /* Fonds : l'écran est indigo, les contenus sont des cartes crème. */
+  --color-bg: #161A3D;
+  --color-bg-secondary: #D9D3E8;
+  --color-surface: #F6ECD6;
+  --color-card: #F6ECD6;
+  --color-selected: #F5B82E;
+
+  /* Marque : #9A3412 pour le texte/contour sur crème (contraste 6,2:1). */
+  --color-primary: #9A3412;
+  --color-primary-hover: #161A3D;
+  --color-primary-disabled: #B9B6D3;
+  --color-accent: #F5B82E;
+  --color-accent-light: #F5B82E;
+
+  /* Textes sur crème */
+  --color-heading: #161A3D;
+  --color-text: #161A3D;
+  --color-text-secondary: #4A4E78;
+  --color-text-muted: #4A4E78;
+
+  --color-border: #B9B6D3;
+  --color-border-active: #161A3D;
+
+  /* États : la palette n'a ni vert ni rouge ; on distingue par l'indigo et l'alerte. */
+  --color-success: #161A3D;
+  --color-success-bg: #D9D3E8;
+  --color-warning: #9A3412;
+  --color-error: #9A3412;
+  --color-info: #4A4E78;
+
+  --font-heading: "Dela Gothic One", "Noto Sans", sans-serif;
+  --font-body: "Noto Sans", system-ui, sans-serif;
+
+  --radius-card: 24px;
+  --radius-button: 999px;
+  --radius-input: 16px;
+  --shadow-card: 0 6px 0 #0B0D22;
+}
+
+body {
+  background: #0B0D22;
+}
+
+.shell {
+  border: 2px solid #3A4290;
+  background: #161A3D;
+  color: #F6ECD6;
+  box-shadow: 0 24px 60px rgba(11, 13, 34, 0.6);
+}
+
+/* Titres français : Dela Gothic One en capitales, ombre dure.
+   Le fon n'y est JAMAIS affiché (garde :lang(fon)). */
+.shell h1:not(:lang(fon)),
+.shell h2:not(:lang(fon)) {
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+}
+.shell h3,
+.shell h4 {
+  font-family: "Noto Sans", system-ui, sans-serif;
+  font-weight: 800;
+}
+
+/* Boutons principaux : pilule jaune, texte indigo, ombre dure. */
+.button {
+  min-height: 48px;
+  border: 0;
+  border-radius: 999px;
+  background: #F5B82E;
+  color: #161A3D;
+  font-weight: 800;
+  box-shadow: 0 5px 0 #0B0D22;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.button:hover:not(:disabled) {
+  background: #F5B82E;
+  border-color: transparent;
+  transform: translateY(-1px);
+}
+.button:active:not(:disabled) {
+  transform: translateY(5px);
+  box-shadow: 0 0 0 #0B0D22;
+}
+.button:disabled {
+  background: #B9B6D3;
+  color: #161A3D;
+  opacity: 0.7;
+}
+.button-secondary {
+  border: 2px solid #161A3D;
+  background: transparent;
+  color: #161A3D;
+  box-shadow: none;
+}
+.button-secondary:hover:not(:disabled) {
+  background: rgba(22, 26, 61, 0.1);
+  border-color: #161A3D;
+}
+
+/* Cartes : crème, ombre dure, coins 24 px. */
+.card {
+  border: 0;
+  border-radius: 24px;
+  background: #F6ECD6;
+  color: #161A3D;
+  box-shadow: 0 6px 0 #0B0D22;
+}
+
+input,
+textarea,
+select {
+  border-radius: 16px;
+}
+
+/* Focus visible sur tous les fonds. */
+:focus-visible {
+  outline: 3px solid #F5B82E;
+  outline-offset: 2px;
+}
+.card :focus-visible {
+  outline-color: #161A3D;
+  box-shadow: 0 0 0 5px #F5B82E;
+}
+
+/* Statut Validé et accents : uniquement des couleurs du prompt. */
+.shell ::selection {
+  background: #F5B82E;
+  color: #161A3D;
+}
+
+/* ---------------------------------------------------------------------
+   Deux contextes de couleur :
+   - posé sur l'écran indigo (.shell) : textes crème, accent jaune ;
+   - posé sur une surface crème : textes indigo, accent #9A3412.
+   --------------------------------------------------------------------- */
+.shell {
+  --color-heading: #F6ECD6;
+  --color-text: #F6ECD6;
+  --color-text-secondary: #D9D3E8;
+  --color-text-muted: #B9B6D3;
+  --color-border: #3A4290;
+  --color-border-active: #F5B82E;
+  --color-primary: #F5B82E;
+  --color-primary-hover: #F5B82E;
+}
+
+.card,
+.choice,
+.consent,
+.contribution-box,
+.dialogue-box,
+.difficulty-chip,
+.domain-card,
+.domain-card-free,
+.fon-key,
+.fon-tone-drawer,
+.history-toggle,
+.home-link,
+.install-banner,
+.locked-text,
+.mission-card,
+.onboarding-list li,
+.phone-nav,
+.task-badge,
+.welcome-action,
+.welcome-hero,
+.welcome-radio,
+.brand-mark,
+.button-secondary,
+.assistant-language select,
+#speaker-label,
+input[type="text"],
+input[type="password"],
+textarea {
+  --color-heading: #161A3D;
+  --color-text: #161A3D;
+  --color-text-secondary: #4A4E78;
+  --color-text-muted: #4A4E78;
+  --color-border: #B9B6D3;
+  --color-border-active: #161A3D;
+  --color-primary: #9A3412;
+  --color-primary-hover: #161A3D;
+  color: #161A3D;
+}
+
+/* Sur fond indigo, le bouton secondaire est un contour crème. */
+.shell > main > .button-secondary,
+.shell > main > section:not(.card) .button-secondary {
+  --color-text: #F6ECD6;
+  border-color: #F6ECD6;
+  color: #F6ECD6;
+}
+
+.domain-card {
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 6px 0 #0B0D22;
+}
+.phone-nav {
+  border-top: 2px solid #3A4290;
+}
+
+/* Fonds terre cuite ou jaune : texte TOUJOURS indigo (règle du prompt). */
+.mic-button,
+.install-banner-icon,
+.difficulty-chip.is-selected {
+  background: #E0592A;
+  border-color: #161A3D;
+  color: #161A3D;
+  box-shadow: 0 5px 0 #0B0D22;
+}
+.mic-button[data-state="listening"] {
+  background: #F5B82E;
+  color: #161A3D;
+}
+.signal-count {
+  background: #F5B82E;
+  color: #161A3D;
+  --color-primary: #161A3D;
+}
+.signal-count * {
+  color: #161A3D;
+}

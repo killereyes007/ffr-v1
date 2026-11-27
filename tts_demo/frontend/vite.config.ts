@@ -9,6 +9,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
+      "^/game/(domains|round)": {
+        target: process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:7861",
+        changeOrigin: true,
+      },
       "/training-phrases": {
         target: process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:7861",
         changeOrigin: true,

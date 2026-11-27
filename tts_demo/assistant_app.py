@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
+import game_db
 from app import MODEL_ID, synthesize
 from assistant_asr import (
     ASR_MODEL_ID,
@@ -243,6 +244,18 @@ def persist_training_phrase(
         )
         os.replace(staging_dir, phrase_dir / sample_id)
 
+    game_db.record_contribution(
+        sample_id,
+        contribution_source if content_mode != "libre" else None,
+        french_text,
+        fon_text,
+        contribution_mode,
+        speaker_id,
+        speaker_label,
+        metadata["review_status"],
+        bool(human_audio),
+    )
+
     encoded_synthesis = (
         base64.b64encode(synthesized_audio).decode("ascii")
         if synthesized_audio
@@ -436,12 +449,12 @@ FONT_HEAD_TAGS = """
 """
 
 
-with gr.Blocks(title="FFR — Fon, français et voix", head=FONT_HEAD_TAGS) as demo:
+with gr.Blocks(title="FFR · Fon, français et voix", head=FONT_HEAD_TAGS) as demo:
     gr.HTML(
         """
         <div id="fon-landing" class="fon-landing">
           <header class="fon-site-header">
-            <a class="fon-site-brand" href="/" aria-label="FFR — accueil">
+            <a class="fon-site-brand" href="/" aria-label="FFR, accueil">
               <span class="fon-site-mark" aria-hidden="true">F</span>
               <span><strong>FFR</strong><small>Fon · français · voix</small></span>
             </a>
@@ -457,7 +470,7 @@ with gr.Blocks(title="FFR — Fon, français et voix", head=FONT_HEAD_TAGS) as d
               <div class="fon-landing-copy">
                 <span class="fon-eyebrow"><span class="fon-eyebrow-dot"></span> Un projet de recherche et de création au Bénin</span>
                 <h1>Le fon mérite d’être <em>entendu.</em></h1>
-                <p>FFR explore comment la technologie peut rapprocher le fon et le français — par la traduction, la voix et des ressources construites avec soin.</p>
+                <p>FFR explore comment la technologie peut rapprocher le fon et le français, par la traduction, la voix et des ressources construites avec soin.</p>
                 <div class="fon-hero-actions">
                   <a class="fon-primary-action" href="/game?screen=assistant">Découvrir l’assistant <span aria-hidden="true">↗</span></a>
                   <a class="fon-secondary-action" href="#vision">Découvrir le projet <span aria-hidden="true">↓</span></a>
@@ -482,7 +495,7 @@ with gr.Blocks(title="FFR — Fon, français et voix", head=FONT_HEAD_TAGS) as d
                 <h2>Une langue vivante mérite des outils à sa mesure.</h2>
               </div>
               <div class="fon-project-copy">
-                <p>Le fon — fɔngbè — se parle, se transmet et évolue au quotidien. Pourtant, les outils numériques qui comprennent et font entendre les langues africaines restent rares. FFR veut contribuer à changer cela, en partant des données, des voix et des réalités du Bénin.</p>
+                <p>Le fon (fɔngbè) se parle, se transmet et évolue au quotidien. Pourtant, les outils numériques qui comprennent et font entendre les langues africaines restent rares. FFR veut contribuer à changer cela, en partant des données, des voix et des réalités du Bénin.</p>
                 <p>Notre ambition : des technologies utiles, évaluées avec les locuteurs, qui soutiennent la transmission sans prétendre remplacer les personnes ni figer une langue diverse.</p>
               </div>
               <div class="fon-facts" aria-label="Repères du projet">
@@ -517,7 +530,7 @@ with gr.Blocks(title="FFR — Fon, français et voix", head=FONT_HEAD_TAGS) as d
             </section>
             <section class="fon-vision-band">
               <span class="fon-eyebrow">Notre vision</span>
-              <blockquote>La technologie doit aider les langues à prendre leur place — et laisser leurs locuteurs en garder la voix.</blockquote>
+              <blockquote>La technologie doit aider les langues à prendre leur place, et laisser leurs locuteurs en garder la voix.</blockquote>
               <p>Des outils accessibles, des données documentées, une évaluation humaine et un développement responsable.</p>
             </section>
             <section class="fon-explore">
@@ -552,7 +565,7 @@ with gr.Blocks(title="FFR — Fon, français et voix", head=FONT_HEAD_TAGS) as d
             </section>
           </main>
           <footer class="fon-site-footer">
-            <a class="fon-site-brand" href="/" aria-label="FFR — accueil">
+            <a class="fon-site-brand" href="/" aria-label="FFR, accueil">
               <span class="fon-site-mark" aria-hidden="true">F</span>
               <span><strong>FFR</strong><small>Fon · français · voix</small></span>
             </a>
@@ -995,6 +1008,38 @@ with gr.Blocks(title="FFR — Fon, français et voix", head=FONT_HEAD_TAGS) as d
 
 
 web_app = FastAPI()
+
+try:
+    game_db.init_db(DATASET_DIR)
+except Exception:  # noqa: BLE001 - le jeu doit démarrer même sans base
+    LOGGER.exception("Base de données du jeu indisponible")
+
+
+@web_app.get("/game/domains")
+async def game_domains_request():
+    try:
+        return {"domains": await run_in_threadpool(game_db.list_domains)}
+    except Exception as error:
+        LOGGER.exception("Lecture des domaines impossible")
+        raise HTTPException(status_code=503, detail="Contenu du jeu indisponible.") from error
+
+
+@web_app.get("/game/round")
+async def game_round_request(
+    domain: str = "",
+    level: int = 1,
+    size: int = 5,
+    exclude: str = "",
+):
+    exclude_ids = [e for e in exclude.split(",") if e][:300]
+    try:
+        cards = await run_in_threadpool(
+            game_db.draw_round, domain.strip() or None, level, size, exclude_ids
+        )
+    except Exception as error:
+        LOGGER.exception("Tirage de la manche impossible")
+        raise HTTPException(status_code=503, detail="Contenu du jeu indisponible.") from error
+    return {"cards": cards}
 
 
 @web_app.get("/game")

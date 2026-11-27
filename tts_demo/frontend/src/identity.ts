@@ -112,3 +112,88 @@ export function getSpeakerIdentity(): SpeakerIdentity {
   // generate and persist one on the fly.
   return saveIdentity(generateDefaultLabel());
 }
+
+// ---- Consentements détaillés, profil facultatif et domaines préférés ------
+// Stockés localement uniquement. TODO serveur : transmettre ces choix avec
+// chaque contribution (voir docs/audit_design.md, risque « Collecte de données »).
+const CONSENT_DETAILS_KEY = "fonConsentDetails";
+const PROFILE_KEY = "fonProfile";
+const DOMAIN_PREFS_KEY = "fonDomainPrefs";
+
+export interface ConsentDetails {
+  profile: boolean;
+  publication: boolean;
+}
+
+export interface SpeakerProfile {
+  ageRange: string;
+  region: string;
+  variant: string;
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage unavailable: the choice stays in-memory for this page load only.
+  }
+}
+
+export function saveConsentDetails(details: ConsentDetails): void {
+  writeJson(CONSENT_DETAILS_KEY, details);
+}
+
+export function getConsentDetails(): ConsentDetails {
+  return readJson<ConsentDetails>(CONSENT_DETAILS_KEY, { profile: false, publication: false });
+}
+
+export function saveProfile(profile: SpeakerProfile): void {
+  writeJson(PROFILE_KEY, profile);
+}
+
+export function saveDomainPrefs(ids: string[]): void {
+  writeJson(DOMAIN_PREFS_KEY, ids);
+}
+
+export function getDomainPrefs(): string[] {
+  return readJson<string[]>(DOMAIN_PREFS_KEY, []);
+}
+
+export function peekSpeakerLabel(): string | null {
+  try {
+    return localStorage.getItem(SPEAKER_LABEL_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Retire l'accord : l'onboarding (consentement, pseudo, mode) sera redemandé. */
+export function withdrawConsent(): void {
+  try {
+    localStorage.removeItem(CONSENT_GIVEN_KEY);
+    localStorage.removeItem(CONSENT_DETAILS_KEY);
+    localStorage.removeItem(ONBOARDING_DONE_KEY);
+  } catch {
+    // stockage indisponible : rien à retirer
+  }
+}
+
+/** Efface toutes les données locales du jeu sur cet appareil (clés « fon* »). */
+export function clearAllLocalData(): void {
+  try {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith("fon"))
+      .forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // stockage indisponible : rien à effacer
+  }
+}

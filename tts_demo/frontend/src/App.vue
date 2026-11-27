@@ -3,15 +3,46 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { usePwaInstall } from "./pwaInstall";
 import {
   generateDefaultLabel,
+  getConsentDetails,
   getContributionMode,
+  getDomainPrefs,
   getSpeakerIdentity,
   hasConsented,
   hasOnboarded,
+  clearAllLocalData,
+  peekSpeakerLabel,
+  withdrawConsent,
   saveConsent,
+  saveConsentDetails,
   saveContributionMode,
+  saveDomainPrefs,
   saveIdentity,
+  saveProfile,
 } from "./identity";
 import { logEvent } from "./analytics";
+import XoCube from "./XoCube.vue";
+import XoIcon from "./XoIcon.vue";
+import XoLogo from "./XoLogo.vue";
+import XoLeaf from "./XoLeaf.vue";
+import FonKeyboard from "./FonKeyboard.vue";
+import { applyFonKey, type FonKey } from "./fonInput";
+import { setTheme, themePref, type ThemePref } from "./theme";
+import {
+  addContribution,
+  awardPoints,
+  loadContributions,
+  type ContributionRecord,
+  levelFor,
+  loadGame,
+  nextLevel,
+  POINTS_VOICE,
+  POINTS_WRITE,
+  streakOf,
+  type Award,
+  type Level,
+} from "./gamification";
+import { vXoTilt } from "./xoTilt";
+import { ROUND_SIZE, cheerFor, fetchDomainInfo, fetchRound, markSeen, roundVerdict, type DomainInfo, type RoundCard } from "./rounds";
 
 interface AudioCapture {
   stream: MediaStream;
@@ -24,6 +55,7 @@ interface AudioCapture {
 }
 
 interface DomainItem {
+  id?: string;
   text: string;
   kind: "mot" | "phrase" | "paragraphe";
 }
@@ -47,7 +79,6 @@ interface Domain {
 // Dynamic bindings (not a static `src="..."` attribute) so Vue's compile-time
 // asset-url transform doesn't try to resolve these /game-assets/ public paths
 // as local module imports.
-const homeHeroImage = "/game-assets/images/home-hero.png";
 
 const domains: Domain[] = [
   {
@@ -187,7 +218,31 @@ const domains: Domain[] = [
 ];
 
 
-const activeScreen = ref<"home" | "game" | "assistant">("game");
+const activeScreen = ref<"home" | "game" | "assistant" | "profile" | "contributions">("home");
+// Destination demandée depuis l'accueil, à rejoindre une fois l'onboarding terminé.
+const pendingTarget = ref<"game" | "assistant" | null>(null);
+const menuOpen = ref(false);
+function openMenu() {
+  menuOpen.value = true;
+  void nextTick(() => document.querySelector<HTMLElement>("#xo-drawer .xo-drawer-item")?.focus());
+}
+function closeMenu() {
+  menuOpen.value = false;
+}
+function menuGo(action: "home" | "game" | "assistant" | "how" | "install" | "profile" | "contributions") {
+  closeMenu();
+  if (action === "home") showHome();
+  else if (action === "game") enterApp("game");
+  else if (action === "assistant") enterApp("assistant");
+  else if (action === "profile" || action === "contributions") openProfileScreen(action);
+  else if (action === "how") {
+    showHome();
+    void nextTick(() => explainHowItWorks());
+  } else void handleInstallClick();
+}
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && menuOpen.value) closeMenu();
+}
 const contributionMode = ref<"domain" | "free">("domain");
 const selectedDomainId = ref<string | null>(null);
 const selectedDomain = computed(
@@ -197,21 +252,31 @@ const selectedItem = ref<DomainItem | null>(null);
 const domainStoryAcknowledged = ref(false);
 const itemFinished = ref(false);
 
+// --- Manches : le serveur tire les cartes au hasard, le joueur ne choisit pas. ---
+const roundCards = ref<RoundCard[]>([]);
+const roundIndex = ref(0);
+const roundContributed = ref(0);
+const roundStreak = ref(0);
+const roundPoints = ref(0);
+const roundSummary = ref(false);
+const roundLoading = ref(false);
+const roundError = ref("");
+const roundDomainId = ref<string | null>(null);
+const domainInfo = ref<Record<string, DomainInfo>>({});
+const roundVerdictText = computed(() => roundVerdict(roundContributed.value, roundCards.value.length || ROUND_SIZE));
+const roundCheer = computed(() => cheerFor(roundStreak.value));
+const currentCard = computed(() => roundCards.value[roundIndex.value] ?? null);
+const isLastCard = computed(() => roundIndex.value >= roundCards.value.length - 1);
+
 // --- Difficulty levels: derived from each item's existing kind classification,
 // not a separate scoring system. Kept as a plain ref so switching domains
 // preserves the player's last-picked level for the session. ---
 type Difficulty = "facile" | "moyen" | "difficile";
-const difficultyLevel = ref<Difficulty>("moyen");
-const difficultyLabels: Record<Difficulty, string> = { facile: "Facile", moyen: "Moyen", difficile: "Difficile" };
 const kindToDifficulty: Record<DomainItem["kind"], Difficulty> = {
   mot: "facile",
   phrase: "moyen",
   paragraphe: "difficile",
 };
-const filteredDomainItems = computed(() => {
-  if (!selectedDomain.value) return [];
-  return selectedDomain.value.items.filter((item) => kindToDifficulty[item.kind] === difficultyLevel.value);
-});
 
 interface OnboardingSlide {
   title: string;
@@ -244,13 +309,25 @@ const onboardingSlides: OnboardingSlide[] = [
   },
 ];
 
-const appStage = ref<"onboarding" | "identify" | "writing-check" | "ready">("ready");
+const appStage = ref<"onboarding" | "identify" | "profile" | "writing-check" | "domains" | "ready">("ready");
 const onboardingSlideIndex = ref(0);
 const isLastOnboardingSlide = computed(
   () => onboardingSlideIndex.value === onboardingSlides.length - 1,
 );
 const speakerLabelInput = ref("");
 const onboardingConsent = ref(false);
+const consentAge = ref(false);
+const consentProfile = ref(getConsentDetails().profile);
+const consentPublication = ref(getConsentDetails().publication);
+const profileAge = ref("");
+const profileRegion = ref("");
+const profileVariant = ref("");
+const preferredDomains = ref<string[]>(getDomainPrefs());
+const domainChoiceSkipped = ref(false);
+const orderedDomains = computed(() => {
+  const prefs = preferredDomains.value;
+  return [...domains].sort((a, b) => Number(prefs.includes(b.id)) - Number(prefs.includes(a.id)));
+});
 const writingCheckSample = "Bonjour, comment vas-tu ?";
 const writingCheckInput = ref("");
 const writingCheckNudge = ref(false);
@@ -272,11 +349,47 @@ function goToIdentify() {
 }
 
 function confirmIdentity() {
-  if (!onboardingConsent.value) return;
+  if (!onboardingConsent.value || !consentAge.value) return;
   saveIdentity(speakerLabelInput.value);
   saveConsent();
+  saveConsentDetails({ profile: consentProfile.value, publication: consentPublication.value });
   logEvent("identify_complete", { speaker_label: speakerLabelInput.value });
+  // Le profil n'est demandé que si la personne a accepté de le partager.
+  appStage.value = consentProfile.value ? "profile" : "writing-check";
+}
+
+function confirmProfile() {
+  saveProfile({
+    ageRange: profileAge.value,
+    region: profileRegion.value.trim(),
+    variant: profileVariant.value.trim(),
+  });
   appStage.value = "writing-check";
+}
+
+function toggleDomainPref(id: string) {
+  const list = preferredDomains.value;
+  if (list.includes(id)) {
+    preferredDomains.value = list.filter((x) => x !== id);
+  } else if (list.length < 3) {
+    preferredDomains.value = [...list, id];
+  }
+}
+
+function finishDomainChoice(save: boolean) {
+  if (save) saveDomainPrefs(preferredDomains.value);
+  appStage.value = "ready";
+  goToPendingTarget();
+}
+
+// Après le choix du mode : choix des domaines préférés (une seule fois).
+function afterWritingCheck() {
+  if (getDomainPrefs().length === 0 && !domainChoiceSkipped.value) {
+    appStage.value = "domains";
+    return;
+  }
+  appStage.value = "ready";
+  goToPendingTarget();
 }
 
 function tryChooseAudioText() {
@@ -288,14 +401,14 @@ function tryChooseAudioText() {
   contributionModeChoice.value = "audio_text";
   saveContributionMode("audio_text");
   logEvent("contribution_mode_chosen", { mode: "audio_text" });
-  appStage.value = "ready";
+  afterWritingCheck();
 }
 
 function chooseAudioOnly() {
   contributionModeChoice.value = "audio_only";
   saveContributionMode("audio_only");
   logEvent("contribution_mode_chosen", { mode: "audio_only" });
-  appStage.value = "ready";
+  afterWritingCheck();
 }
 const currentScreenName = computed<string | null>(() => {
   if (appStage.value !== "ready") return null;
@@ -313,52 +426,186 @@ watch(
 const gameStatus = ref("");
 const gameStatusType = ref<"info" | "error" | "success">("info");
 const savedContributions = ref(0);
-const clock = ref("");
 
-// --- Fon special-character toolbar (shared by the writing-check textarea and
-// the "Ta traduction en fon" field) : inserts at the cursor position of the
-// last-focused fon-capable textarea, never a full replacement keyboard. ---
+// --- Joueur : points d'effort, série, niveau (stockage local, voir gamification.ts) ---
+const game = ref(loadGame());
+const playerLevel = computed(() => levelFor(game.value.points));
+const playerNext = computed(() => nextLevel(game.value.points));
+const levelProgress = computed(() => {
+  const next = playerNext.value;
+  if (!next) return 100;
+  const start = playerLevel.value.min;
+  return Math.round(((game.value.points - start) / (next.min - start)) * 100);
+});
+const streakDays = computed(() => streakOf(game.value.days));
+const lastAward = ref<Award | null>(null);
+const levelUp = ref<Level | null>(null);
+// --- Profil et suivi ---
+const myContributions = ref<ContributionRecord[]>(loadContributions());
+const consentView = ref(getConsentDetails());
+const confirmWithdraw = ref(false);
+const confirmErase = ref(false);
+const speakerName = computed(() => peekSpeakerLabel() ?? "Pas encore de pseudo");
+const statusLegend = [
+  { key: "recu", label: "Reçu", help: "Ta contribution est bien arrivée." },
+  { key: "relecture", label: "En relecture", help: "Un relecteur la regarde." },
+  { key: "expert", label: "À valider par un expert", help: "Elle attend un expert de la langue." },
+  { key: "valide", label: "Validé", help: "Elle est acceptée dans le corpus." },
+  { key: "rejete", label: "Rejeté", help: "Elle n'a pas pu être gardée." },
+] as const;
 
-const fonSpecialLetters = ["Ɖ", "ɖ", "Ɛ", "ɛ", "Ɔ", "ɔ"];
-const fonBaseVowels = ["a", "e", "ɛ", "i", "o", "ɔ", "u"];
-const fonToneMap: Record<string, string[]> = {
-  a: ["á", "à", "ǎ", "â", "ā"],
-  e: ["é", "è", "ě", "ê", "ē"],
-  i: ["í", "ì", "ǐ", "î", "ī"],
-  o: ["ó", "ò", "ǒ", "ô", "ō"],
-  u: ["ú", "ù", "ǔ", "û", "ū"],
-  "ɛ": ["ɛ́", "ɛ̀", "ɛ̌", "ɛ̂", "ɛ̄"],
-  "ɔ": ["ɔ́", "ɔ̀", "ɔ̌", "ɔ̂", "ɔ̄"],
+function formatContribDate(at: number): string {
+  return new Date(at).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+}
+function setModeChoice(mode: "audio_only" | "audio_text") {
+  contributionModeChoice.value = mode;
+  saveContributionMode(mode);
+  logEvent("contribution_mode_chosen", { mode, from: "profile" });
+}
+function setOptionalConsent(key: "profile" | "publication", value: boolean) {
+  consentView.value = { ...consentView.value, [key]: value };
+  saveConsentDetails(consentView.value);
+}
+function retakeWritingTest() {
+  pendingTarget.value = null;
+  appStage.value = "writing-check";
+}
+function doWithdrawConsent() {
+  withdrawConsent();
+  window.location.reload();
+}
+function doEraseLocalData() {
+  clearAllLocalData();
+  window.location.reload();
+}
+function openProfileScreen(target: "profile" | "contributions") {
+  activeScreen.value = target;
+  if (target === "contributions") myContributions.value = loadContributions();
+  confirmWithdraw.value = false;
+  confirmErase.value = false;
+  void nextTick(() => document.querySelector(".shell main")?.scrollTo({ top: 0 }));
+}
+
+const themeOptions: { v: ThemePref; label: string; icon: "auto" | "sun" | "moon" }[] = [
+  { v: "auto", label: "Auto", icon: "auto" },
+  { v: "light", label: "Clair", icon: "sun" },
+  { v: "dark", label: "Sombre", icon: "moon" },
+];
+
+const writeOpen = ref(false);
+const writeSkipped = ref(false);
+const dailyMission = computed(
+  () => orderedDomains.value.find((d) => (game.value.byDomain[d.id] ?? 0) < d.items.length) ?? orderedDomains.value[0] ?? null,
+);
+
+const domainIcons: Record<string, "heart" | "book" | "drum" | "leaf" | "cart" | "building" | "tools"> = {
+  sante: "heart",
+  education: "book",
+  religion_traditions: "drum",
+  agriculture: "leaf",
+  commerce_marche: "cart",
+  administration: "building",
+  metiers_travail: "tools",
 };
 
-const focusedFonInput = ref<HTMLTextAreaElement | null>(null);
-const openTonePicker = ref<string | null>(null);
+// Domaines verrouillés au lancement. TODO données : pas encore de contenu pour ces domaines.
+const lockedDomains: { id: string; label: string; icon: "bus" | "book" | "drum" | "scroll"; level: number }[] = [
+  { id: "transport_ville", label: "Transport et ville", icon: "bus", level: 3 },
+  { id: "ecole_numerique", label: "École et numérique", icon: "book", level: 3 },
+  { id: "ceremonies_culture", label: "Cérémonies et culture", icon: "drum", level: 3 },
+  { id: "proverbes_contes", label: "Proverbes et contes", icon: "scroll", level: 4 },
+];
 
-function trackFonInputFocus(event: FocusEvent) {
-  focusedFonInput.value = event.target as HTMLTextAreaElement;
+function domainProgress(domain: Domain): number {
+  const done = game.value.byDomain[domain.id] ?? 0;
+  const total = domainInfo.value[domain.id]?.total ?? domain.items.length;
+  return Math.min(100, Math.round((done / Math.max(1, total)) * 100));
 }
 
-function toggleTonePicker(vowel: string) {
-  openTonePicker.value = openTonePicker.value === vowel ? null : vowel;
+function dismissLevelUp() {
+  levelUp.value = null;
+}
+const clock = ref("");
+
+// --- Clavier fon (champ d'essai d'écriture et « Ta traduction en fon ») :
+// quand un champ fon a le focus, le clavier fon s'affiche en bas de l'écran à la
+// place du clavier du téléphone (inputmode="none" sur le champ). Un clavier
+// physique reste utilisable sur ordinateur. ---
+
+const fonKbTarget = ref<HTMLTextAreaElement | null>(null);
+
+function openFonKeyboard(event: FocusEvent) {
+  const el = event.target as HTMLTextAreaElement;
+  fonKbTarget.value = el;
+  void nextTick(() => el.scrollIntoView({ block: "center", behavior: "smooth" }));
 }
 
-function insertFonChar(char: string) {
-  const el = focusedFonInput.value;
+function closeFonKeyboard(event: FocusEvent) {
+  if (event.target === fonKbTarget.value) fonKbTarget.value = null;
+}
+
+// Bouton « Réécouter » du clavier : l'audio lié au champ en cours d'écriture
+// (ta voix pour ta traduction, la réponse du guide pour sa correction).
+const fonKbListening = ref(false);
+let fonKbAudio: HTMLAudioElement | null = null;
+const fonKbListenUrl = computed(() => {
+  const id = fonKbTarget.value?.id;
+  if (id === "contribution-fon") return contributionAudioUrl.value;
+  if (id === "assistant-answer") return assistantResponseAudioUrl.value;
+  return null;
+});
+
+function stopFonKbAudio() {
+  fonKbAudio?.pause();
+  fonKbListening.value = false;
+}
+
+function toggleFonKbListen() {
+  toggleListen(fonKbListenUrl.value);
+}
+
+function toggleContributionVoice() {
+  toggleListen(contributionAudioUrl.value);
+}
+
+function toggleListen(url: string | null) {
+  if (!url) return;
+  if (fonKbListening.value) {
+    stopFonKbAudio();
+    return;
+  }
+  if (!fonKbAudio) {
+    fonKbAudio = new Audio();
+    fonKbAudio.addEventListener("ended", () => (fonKbListening.value = false));
+  }
+  if (fonKbAudio.src !== url) fonKbAudio.src = url;
+  fonKbAudio.currentTime = 0;
+  fonKbListening.value = true;
+  void fonKbAudio.play().catch(() => (fonKbListening.value = false));
+}
+
+watch(fonKbTarget, (el) => {
+  if (!el) stopFonKbAudio();
+});
+
+function onFonKey(key: FonKey) {
+  const el = fonKbTarget.value;
   if (!el) return;
+  if (key.kind === "close") {
+    el.blur();
+    return;
+  }
   const start = el.selectionStart ?? el.value.length;
   const end = el.selectionEnd ?? el.value.length;
-  const newValue = el.value.slice(0, start) + char + el.value.slice(end);
-  if (el.id === "contribution-fon") {
-    contributionFon.value = newValue;
-  } else if (el.id === "writing-check-input") {
-    writingCheckInput.value = newValue;
-  }
-  const newCursor = start + char.length;
-  openTonePicker.value = null;
-  void nextTick(() => {
-    el.focus();
-    el.setSelectionRange(newCursor, newCursor);
-  });
+  const result = applyFonKey(el.value, start, end, key);
+  if (!result) return;
+  const max = el.maxLength > 0 ? el.maxLength : Infinity;
+  if (result.value.length > max) return;
+  // Écrit dans le champ puis émet « input » : le v-model du champ se met à jour,
+  // quel que soit le champ fon ciblé.
+  el.value = result.value;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  void nextTick(() => el.setSelectionRange(result.cursor, result.cursor));
 }
 
 // --- Contribution zone shared by "Phrase proposée" (mission) and "Ma phrase" (free) modes ---
@@ -379,12 +626,13 @@ const contributionStatusState = ref<"info" | "error" | "success">("info");
 const contributionAiAudioEl = ref<HTMLAudioElement | null>(null);
 
 const isAudioOnlyMode = computed(() => contributionModeChoice.value === "audio_only");
+// L'écriture est facultative : sans texte fon, la contribution part en mode voix seule.
+const hasWrittenFon = computed(() => !isAudioOnlyMode.value && contributionFon.value.trim().length > 0);
 
 const canSaveContribution = computed(
   () =>
     Boolean(
       contributionFrench.value.trim() &&
-        (isAudioOnlyMode.value || contributionFon.value.trim()) &&
         contributionHumanAudio.value &&
         !contributionRecording.value &&
         !contributionSaving.value,
@@ -417,7 +665,40 @@ function openDomainSelector() {
 }
 
 function scrollToContribution() {
-  openDomainSelector();
+  enterApp("game");
+}
+
+function goToPendingTarget() {
+  const target = pendingTarget.value;
+  pendingTarget.value = null;
+  if (target === "assistant") {
+    activeScreen.value = "assistant";
+  } else {
+    openDomainSelector();
+  }
+}
+
+// Porte d'entrée unique depuis l'accueil : l'onboarding (consentement, pseudo,
+// choix du mode) ne s'affiche qu'au premier passage, après un appui sur JOUER.
+function enterApp(target: "game" | "assistant") {
+  if (!hasOnboarded() || !hasConsented()) {
+    pendingTarget.value = target;
+    appStage.value = "onboarding";
+    onboardingSlideIndex.value = 0;
+    logEvent("onboarding_step_view", { slide_index: 0 });
+    return;
+  }
+  if (!getContributionMode()) {
+    pendingTarget.value = target;
+    appStage.value = "writing-check";
+    return;
+  }
+  pendingTarget.value = target;
+  goToPendingTarget();
+}
+
+function explainHowItWorks() {
+  document.getElementById("xo-how")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function showHome() {
@@ -428,7 +709,7 @@ function showHome() {
 }
 
 function startChapter() {
-  openDomainSelector();
+  enterApp("game");
 }
 
 function setGameStatus(message: string, type: "info" | "error" | "success" = "info") {
@@ -568,10 +849,7 @@ async function finishContributionRecording() {
 }
 
 async function startContributionRecording() {
-  if (!isAudioOnlyMode.value && !contributionFon.value.trim()) {
-    contributionRecordStatus.value = "Écris d'abord la phrase en fon que tu vas lire.";
-    return;
-  }
+  // La voix passe en premier : l'écriture est facultative et vient après.
   if (!navigator.mediaDevices?.getUserMedia) {
     contributionRecordStatus.value = "L'accès au micro n'est pas disponible dans ce navigateur.";
     return;
@@ -612,7 +890,7 @@ async function startContributionRecording() {
     clearContributionRecording();
     contributionRecording.value = true;
     contributionRecordingStartedAt = performance.now();
-    contributionRecordStatus.value = "Enregistrement… lis la phrase en fon.";
+    contributionRecordStatus.value = "Enregistrement… dis la phrase en fon.";
     logEvent("recording_start", { screen: contributionMode.value });
     stopTimer = setTimeout(() => void finishContributionRecording(), 30_000);
   } catch (error) {
@@ -647,39 +925,119 @@ function chooseFreeDomain() {
   });
 }
 
-function selectDomainCard(domain: Domain) {
+watch([selectedItem, contributionMode], () => {
+  writeOpen.value = false;
+  writeSkipped.value = false;
+});
+
+function nextPhrase() {
+  if (isLastCard.value) {
+    endRound();
+    return;
+  }
+  showCard(roundIndex.value + 1);
+  void nextTick(() => document.querySelector(".shell main")?.scrollTo({ top: 0 }));
+}
+
+function localRound(domainId: string | null): RoundCard[] {
+  const pool = domains
+    .filter((d) => !domainId || d.id === domainId)
+    .flatMap((d) =>
+      d.items.map((i) => ({
+        id: `local:${d.id}:${i.text}`,
+        domain_id: d.id,
+        domain_label: d.label,
+        kind: i.kind,
+        difficulty: kindToDifficulty[i.kind],
+        text: i.text,
+      })),
+    );
+  const order = { mot: 0, phrase: 1, paragraphe: 2 } as const;
+  return pool
+    .sort(() => Math.random() - 0.5)
+    .slice(0, ROUND_SIZE)
+    .sort((a, b) => order[a.kind] - order[b.kind]);
+}
+
+function showCard(i: number) {
+  const card = roundCards.value[i];
+  if (!card) return;
+  roundIndex.value = i;
+  if (domains.some((d) => d.id === card.domain_id)) selectedDomainId.value = card.domain_id;
+  selectedItem.value = { id: card.id, text: card.text, kind: card.kind };
+  itemFinished.value = false;
+  contributionFrench.value = card.text;
+  contributionFon.value = "";
+  clearContributionRecording();
+  lastAward.value = null;
+  setGameStatus("");
+  markSeen(card.id);
+  logEvent("round_card_shown", { domain_id: card.domain_id, index: i });
+}
+
+async function startRound(domainId: string | null) {
   contributionMode.value = "domain";
-  selectedDomainId.value = domain.id;
+  roundDomainId.value = domainId;
+  roundSummary.value = false;
+  roundError.value = "";
+  roundContributed.value = 0;
+  roundStreak.value = 0;
+  roundPoints.value = 0;
+  roundIndex.value = 0;
+  roundCards.value = [];
   selectedItem.value = null;
   itemFinished.value = false;
-  domainStoryAcknowledged.value = domain.mode !== "histoire";
   contributionFrench.value = "";
   contributionFon.value = "";
   clearContributionRecording();
   setGameStatus("");
-  logEvent("domain_selected", { domain_id: domain.id });
+  const first = domainId ? domains.find((d) => d.id === domainId) : orderedDomains.value[0];
+  selectedDomainId.value = first?.id ?? null;
+  domainStoryAcknowledged.value = !first || !domainId || first.mode !== "histoire";
+  logEvent("round_start", { domain_id: domainId ?? "mix", level: playerLevel.value.n });
+  roundLoading.value = true;
+  try {
+    roundCards.value = await fetchRound(domainId, playerLevel.value.n);
+  } catch {
+    roundCards.value = localRound(domainId);
+  } finally {
+    roundLoading.value = false;
+  }
+  if (!roundCards.value.length) {
+    roundError.value = "Aucune carte disponible pour le moment.";
+    return;
+  }
+  showCard(0);
+}
+
+function endRound() {
+  roundSummary.value = true;
+  selectedItem.value = null;
+  itemFinished.value = false;
+  contributionFrench.value = "";
+  logEvent("round_end", { contributed: roundContributed.value, size: roundCards.value.length });
+  void nextTick(() => document.querySelector(".shell main")?.scrollTo({ top: 0 }));
+}
+
+function selectDomainCard(domain: Domain) {
+  void startRound(domain.id);
 }
 
 function acknowledgeDomainStory() {
   domainStoryAcknowledged.value = true;
 }
 
-function chooseDomainItem(domain: Domain, item: DomainItem, index: number) {
-  selectedItem.value = item;
-  itemFinished.value = false;
-  contributionFrench.value = item.text;
-  contributionFon.value = "";
-  clearContributionRecording();
-  setGameStatus(
-    "Phrase choisie. Tu peux la traduire et l'enregistrer, ou revenir en arrière.",
-  );
-  logEvent("domain_item_chosen", { domain_id: domain.id, item_index: index });
-}
-
 function finishDomainItem(contributed: boolean) {
   const domain = selectedDomain.value;
   if (!domain || !selectedItem.value) return;
   itemFinished.value = true;
+  if (contributed) {
+    roundContributed.value += 1;
+    roundStreak.value += 1;
+    roundPoints.value += lastAward.value?.points ?? 0;
+  } else {
+    roundStreak.value = 0;
+  }
   setGameStatus(
     contributed
       ? `Contribution reçue pour « ${domain.label} » ; elle reste à vérifier.`
@@ -687,6 +1045,74 @@ function finishDomainItem(contributed: boolean) {
     contributed ? "success" : "info",
   );
   logEvent("domain_item_complete", { domain_id: domain.id, contributed });
+}
+
+// --- Glisser la carte de la phrase (gauche ou droite) pour la passer. Le geste
+// ne démarre pas sur un bouton, un champ ou un lecteur audio, et reste
+// désactivé pendant un enregistrement ou un envoi. ---
+const SWIPE_THRESHOLD = 90;
+const swipeDx = ref(0);
+const swipeLeaving = ref(false);
+let swipeStart: { x: number; y: number; id: number } | null = null;
+let swipeHorizontal = false;
+
+const canSwipeSkip = computed(
+  () =>
+    contributionMode.value === "domain" &&
+    !!selectedItem.value &&
+    !itemFinished.value &&
+    !contributionRecording.value &&
+    !contributionSaving.value,
+);
+const swipeStyle = computed(() => {
+  if (!swipeDx.value && !swipeLeaving.value) return undefined;
+  return {
+    transform: `translateX(${swipeDx.value}px) rotate(${swipeDx.value / 25}deg)`,
+    opacity: String(Math.max(0.35, 1 - Math.abs(swipeDx.value) / 420)),
+    transition: swipeStart ? "none" : "transform 0.22s ease, opacity 0.22s ease",
+  };
+});
+
+function onSwipeDown(event: PointerEvent) {
+  if (!canSwipeSkip.value || swipeLeaving.value || event.button > 0) return;
+  const target = event.target as HTMLElement;
+  if (target.closest("button, a, textarea, input, select, audio, label, .xo-write")) return;
+  swipeStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
+  swipeHorizontal = false;
+}
+
+function onSwipeMove(event: PointerEvent) {
+  if (!swipeStart || event.pointerId !== swipeStart.id) return;
+  const dx = event.clientX - swipeStart.x;
+  const dy = event.clientY - swipeStart.y;
+  if (!swipeHorizontal) {
+    if (Math.abs(dx) < 10) return;
+    // Geste surtout vertical : on laisse défiler la page.
+    if (Math.abs(dy) > Math.abs(dx)) {
+      swipeStart = null;
+      return;
+    }
+    swipeHorizontal = true;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+  swipeDx.value = dx;
+}
+
+function onSwipeEnd() {
+  if (!swipeStart) return;
+  swipeStart = null;
+  const dx = swipeDx.value;
+  if (swipeHorizontal && Math.abs(dx) >= SWIPE_THRESHOLD && canSwipeSkip.value) {
+    swipeLeaving.value = true;
+    swipeDx.value = Math.sign(dx) * 520;
+    window.setTimeout(() => {
+      finishDomainItem(false);
+      swipeDx.value = 0;
+      swipeLeaving.value = false;
+    }, 220);
+  } else {
+    swipeDx.value = 0;
+  }
 }
 
 function classifySaveFailure(error: unknown): "network" | "server_error" | "validation" {
@@ -727,8 +1153,8 @@ async function saveContribution() {
             ? kindToDifficulty[selectedItem.value.kind]
             : null,
         french_text: contributionFrench.value.trim(),
-        fon_text: isAudioOnlyMode.value ? "" : contributionFon.value.trim(),
-        contribution_mode: contributionModeChoice.value,
+        fon_text: hasWrittenFon.value ? contributionFon.value.trim() : "",
+        contribution_mode: hasWrittenFon.value ? "audio_text" : "audio_only",
         human_audio: contributionHumanAudio.value,
         synthesized_audio: contributionAiAudioBase64.value,
         self_reviewed: true,
@@ -747,6 +1173,17 @@ async function saveContribution() {
       throw error;
     }
     logEvent("save_success", { source, domain: domainId });
+    const award = awardPoints(domainId, POINTS_VOICE + (hasWrittenFon.value ? POINTS_WRITE : 0));
+    lastAward.value = award;
+    game.value = loadGame();
+    if (award.leveledUp) levelUp.value = award.leveledUp;
+    addContribution({
+      id: String(Date.now()),
+      at: Date.now(),
+      domain: domainId === "libre" ? "Phrase libre" : selectedDomain.value?.label ?? domainId,
+      text: contributionFrench.value.trim(),
+    });
+    myContributions.value = loadContributions();
     if (contributionMode.value === "domain") {
       savedContributions.value += 1;
       finishDomainItem(true);
@@ -779,6 +1216,14 @@ type GuideState = "idle" | "listening" | "speaking" | "processing";
 type ProgressMode = "hidden" | "recording" | "indeterminate" | "complete" | "error";
 
 const assistantLanguage = ref<"Français" | "Fon">("Français");
+// La transcription de l'assistant n'est en fon que si la langue parlée est
+// « Fon » : si la langue change alors que ce champ a le focus, on ouvre ou on
+// ferme le clavier fon en conséquence.
+watch(assistantLanguage, (language) => {
+  const el = document.getElementById("assistant-transcript") as HTMLTextAreaElement | null;
+  if (!el || document.activeElement !== el) return;
+  fonKbTarget.value = language === "Fon" ? el : null;
+});
 const assistantGuideState = ref<GuideState>("idle");
 const assistantRecording = ref(false);
 const assistantMicDisabled = ref(false);
@@ -795,23 +1240,11 @@ const assistantShowReplay = ref(false);
 const assistantResponseReady = ref(false);
 const assistantAudioEl = ref<HTMLAudioElement | null>(null);
 
-function readStoredAssistantRecordConsent(): boolean {
-  try {
-    return localStorage.getItem("fonAssistantRecordConsent") === "1";
-  } catch {
-    return false;
-  }
-}
+// Le consentement est donné une seule fois à la première connexion (plus de case à chaque enregistrement).
+// TODO serveur : le champ `consent: true` des requêtes est toujours envoyé ; voir docs/changelog_design.md.
+const assistantRecordConsent = ref(hasConsented());
 
-const assistantRecordConsent = ref(readStoredAssistantRecordConsent());
 
-watch(assistantRecordConsent, (value) => {
-  try {
-    localStorage.setItem("fonAssistantRecordConsent", value ? "1" : "0");
-  } catch {
-    // ignored: best-effort preference persistence only
-  }
-});
 
 let assistantCapture: AudioCapture | null = null;
 let assistantProgressTimer: ReturnType<typeof setInterval> | null = null;
@@ -1136,6 +1569,14 @@ async function handleInstallClick() {
 }
 
 onMounted(() => {
+  fetchDomainInfo()
+    .then((list) => {
+      domainInfo.value = Object.fromEntries(list.map((d) => [d.id, d]));
+    })
+    .catch(() => {
+      // sans serveur de contenu : on garde les totaux embarqués
+    });
+  window.addEventListener("keydown", onGlobalKeydown);
   logEvent("app_open");
   updateClock();
   clockTimer = setInterval(updateClock, 60_000);
@@ -1147,7 +1588,11 @@ onMounted(() => {
     activeScreen.value = "game";
     setContributionMode("free");
   }
-  if (!hasOnboarded() || !hasConsented()) {
+  if (!requestedScreen) {
+    // Visite normale : l'accueil est la première page, sans onboarding forcé.
+    const storedMode = getContributionMode();
+    if (storedMode) contributionModeChoice.value = storedMode;
+  } else if (!hasOnboarded() || !hasConsented()) {
     appStage.value = "onboarding";
     onboardingSlideIndex.value = 0;
     logEvent("onboarding_step_view", { slide_index: 0 });
@@ -1165,6 +1610,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onGlobalKeydown);
   if (clockTimer) clearInterval(clockTimer);
   if (stopTimer) clearTimeout(stopTimer);
   if (contributionAudioUrl.value) URL.revokeObjectURL(contributionAudioUrl.value);
@@ -1194,8 +1640,10 @@ onBeforeUnmount(() => {
       </span>
     </div>
 
-    <main v-if="appStage === 'onboarding'" class="onboarding-screen">
-      <section class="card onboarding-card">
+    <main v-if="appStage === 'onboarding'" class="onboarding-screen xo-stage">
+      <div class="xo-zigzag" aria-hidden="true"></div>
+      <XoCube />
+      <section v-xo-tilt class="card onboarding-card">
         <span class="eyebrow">Avant de commencer</span>
         <h1>{{ onboardingSlides[onboardingSlideIndex].title }}</h1>
         <p v-if="onboardingSlides[onboardingSlideIndex].body" class="story-copy">
@@ -1230,8 +1678,10 @@ onBeforeUnmount(() => {
       </section>
     </main>
 
-    <main v-else-if="appStage === 'identify'" class="onboarding-screen">
-      <section class="card onboarding-card">
+    <main v-else-if="appStage === 'identify'" class="onboarding-screen xo-stage">
+      <div class="xo-zigzag" aria-hidden="true"></div>
+      <XoCube />
+      <section v-xo-tilt class="card onboarding-card">
         <span class="eyebrow">Avant de commencer</span>
         <h1>Choisis un pseudonyme</h1>
         <p class="story-copy">
@@ -1246,82 +1696,132 @@ onBeforeUnmount(() => {
           maxlength="60"
           placeholder="Voix-0000"
         />
-        <label class="consent">
-          <input v-model="onboardingConsent" type="checkbox" />
-          <span>
-            Je suis majeur·e. J'ai compris et j'accepte d'y participer : mes enregistrements
-            vocaux et les phrases que je propose en fon serviront à entraîner des modèles de
-            reconnaissance et de synthèse vocale pour le fon, pourront être conservés sur le
-            serveur du prototype et resteront à vérifier par des locuteurs. Je n'enregistrerai
-            que ma propre voix. Pour demander la suppression de mes contributions, je
-            contacterai le responsable du projet. Cet accord vaut pour toutes mes contributions
-            futures sur cet appareil.
-          </span>
-        </label>
+        <fieldset class="xo-consents">
+          <legend class="prompt-label">Ton accord, case par case</legend>
+          <label class="consent xo-consent">
+            <input v-model="consentAge" type="checkbox" />
+            <span><b>J'ai 18 ans ou plus.</b> <em>Obligatoire</em></span>
+          </label>
+          <label class="consent xo-consent">
+            <input v-model="onboardingConsent" type="checkbox" />
+            <span>
+              <b>Ma voix et mes textes.</b> <em>Obligatoire</em><br />
+              J'accepte que mes enregistrements et les phrases que j'écris servent à entraîner des
+              modèles de reconnaissance et de synthèse vocale du fon. Ils sont gardés sur le serveur
+              du prototype et vérifiés par des locuteurs. Je n'enregistre que ma propre voix.
+            </span>
+          </label>
+          <label class="consent xo-consent">
+            <input v-model="consentProfile" type="checkbox" />
+            <span>
+              <b>Mon profil.</b> <em>Facultatif</em><br />
+              J'accepte de donner mon âge, ma région et ma variante de fon, pour mieux comprendre les voix.
+            </span>
+          </label>
+          <label class="consent xo-consent">
+            <input v-model="consentPublication" type="checkbox" />
+            <span>
+              <b>Un jeu de données ouvert.</b> <em>Facultatif</em><br />
+              J'accepte que mes contributions validées soient publiées dans un jeu de données ouvert.
+            </span>
+          </label>
+          <p class="hint">
+            Tu peux retirer ton accord ou supprimer tes enregistrements à tout moment en écrivant au
+            responsable du projet. Ces choix valent pour cet appareil.
+          </p>
+        </fieldset>
         <div class="onboarding-actions">
-          <button class="button" type="button" :disabled="!onboardingConsent" @click="confirmIdentity">
+          <button class="button" type="button" :disabled="!onboardingConsent || !consentAge" @click="confirmIdentity">
             Continuer
           </button>
         </div>
       </section>
     </main>
 
-    <main v-else-if="appStage === 'writing-check'" class="onboarding-screen">
-      <section class="card onboarding-card">
+    <main v-else-if="appStage === 'profile'" class="onboarding-screen xo-stage">
+      <div class="xo-zigzag" aria-hidden="true"></div>
+      <XoCube />
+      <section v-xo-tilt class="card onboarding-card">
+        <span class="eyebrow">Profil · facultatif</span>
+        <h1>Dis-nous qui tu es</h1>
+        <p class="story-copy">Tout est facultatif. Ces infos aident à comprendre les différentes façons de parler le fon.</p>
+        <label class="prompt-label" for="profile-age">Ta tranche d'âge</label>
+        <select id="profile-age" v-model="profileAge" class="xo-select">
+          <option value="">Je préfère ne pas dire</option>
+          <option value="18-24">18 à 24 ans</option>
+          <option value="25-34">25 à 34 ans</option>
+          <option value="35-49">35 à 49 ans</option>
+          <option value="50+">50 ans et plus</option>
+        </select>
+        <label class="prompt-label" for="profile-region">Ta région</label>
+        <input id="profile-region" v-model="profileRegion" class="xo-input" type="text" maxlength="60" placeholder="Ex. : Atlantique, Zou, Ouémé…" />
+        <label class="prompt-label" for="profile-variant">Ta variante de fon</label>
+        <input id="profile-variant" v-model="profileVariant" class="xo-input" type="text" maxlength="60" placeholder="Si tu la connais" />
+        <div class="onboarding-actions">
+          <button class="button button-secondary" type="button" @click="appStage = 'writing-check'">Passer</button>
+          <button class="button" type="button" @click="confirmProfile">Continuer</button>
+        </div>
+      </section>
+    </main>
+
+    <main v-else-if="appStage === 'domains'" class="onboarding-screen xo-stage">
+      <div class="xo-zigzag" aria-hidden="true"></div>
+      <section v-xo-tilt class="card onboarding-card">
+        <span class="eyebrow">Dernière étape</span>
+        <h1>Tes domaines préférés</h1>
+        <p class="story-copy">Choisis 2 ou 3 sujets qui te parlent. Tu les verras en premier.</p>
+        <div class="xo-pick-grid" role="group" aria-label="Domaines préférés, 3 au maximum">
+          <button
+            v-for="(domain, i) in domains"
+            :key="domain.id"
+            type="button"
+            class="xo-pick"
+            :class="{ 'is-picked': preferredDomains.includes(domain.id) }"
+            :style="{ '--tilt': ((i % 3) - 1) * 2 + 'deg' }"
+            :aria-pressed="preferredDomains.includes(domain.id)"
+            :disabled="!preferredDomains.includes(domain.id) && preferredDomains.length >= 3"
+            @click="toggleDomainPref(domain.id)"
+          >
+            <XoIcon v-if="preferredDomains.includes(domain.id)" name="check" />
+            <span>{{ domain.label }}</span>
+          </button>
+        </div>
+        <p class="hint" role="status">{{ preferredDomains.length }} sur 3 choisis</p>
+        <div class="onboarding-actions">
+          <button class="button button-secondary" type="button" @click="domainChoiceSkipped = true; finishDomainChoice(false)">Passer</button>
+          <button class="button" type="button" :disabled="preferredDomains.length < 2" @click="finishDomainChoice(true)">C'est parti</button>
+        </div>
+      </section>
+    </main>
+
+    <main v-else-if="appStage === 'writing-check'" class="onboarding-screen xo-stage">
+      <div class="xo-zigzag" aria-hidden="true"></div>
+      <XoCube />
+      <section v-xo-tilt class="card onboarding-card">
         <span class="eyebrow">Avant de commencer</span>
         <h1>Comment veux-tu contribuer ?</h1>
         <p class="story-copy">
           Le fon se parle avant tout à l'oral. Si tu es plus à l'aise pour parler que pour
-          écrire, tu peux contribuer uniquement avec ta voix — le champ d'écriture ne te sera
+          écrire, tu peux contribuer uniquement avec ta voix : le champ d'écriture ne te sera
           jamais demandé.
         </p>
         <span class="prompt-label">Essaie d'écrire une traduction</span>
         <p class="locked-text">{{ writingCheckSample }}</p>
         <label class="prompt-label" for="writing-check-input">Essaie d'écrire ta traduction en fon</label>
-        <div class="fon-keyboard" role="group" aria-label="Caractères spéciaux du fon">
-          <div class="fon-keyboard-row">
-            <button
-              v-for="letter in fonSpecialLetters"
-              :key="'letter-' + letter"
-              type="button"
-              class="fon-key"
-              @mousedown.prevent
-              @click="insertFonChar(letter)"
-            >{{ letter }}</button>
-          </div>
-          <div class="fon-keyboard-row">
-            <div v-for="vowel in fonBaseVowels" :key="'vowel-' + vowel" class="fon-vowel-wrap">
-              <button
-                type="button"
-                class="fon-key"
-                :class="{ 'is-open': openTonePicker === vowel }"
-                @mousedown.prevent
-                @click="toggleTonePicker(vowel)"
-              >{{ vowel }}</button>
-              <div v-if="openTonePicker === vowel" class="fon-tone-drawer">
-                <button type="button" class="fon-key fon-key-tone" @mousedown.prevent @click="insertFonChar(vowel)">{{ vowel }}</button>
-                <button
-                  v-for="tone in fonToneMap[vowel]"
-                  :key="tone"
-                  type="button"
-                  class="fon-key fon-key-tone"
-                  @mousedown.prevent
-                  @click="insertFonChar(tone)"
-                >{{ tone }}</button>
-              </div>
-            </div>
-          </div>
-        </div>
         <textarea
           id="writing-check-input"
           v-model="writingCheckInput"
+          class="xo-fon"
+          lang="fon"
+          inputmode="none"
           rows="2"
           maxlength="200"
-          placeholder="Essaie, même si tu n'es pas sûr·e…"
-          @focus="trackFonInputFocus"
+          placeholder="Touche ici pour ouvrir le clavier fon…"
+          @focus="openFonKeyboard"
+          @blur="closeFonKeyboard"
         ></textarea>
         <p class="hint">
-          Ceci n'est pas noté ni corrigé automatiquement — personne ne vérifie l'orthographe,
+          Ceci n'est pas noté ni corrigé automatiquement : personne ne vérifie l'orthographe,
           c'est juste pour t'aider à savoir ce qui te convient le mieux.
         </p>
         <p v-if="writingCheckNudge" class="hint" role="status">
@@ -1341,49 +1841,15 @@ onBeforeUnmount(() => {
     <template v-else>
     <header>
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 100 100">
-            <path
-              d="M28,26 C31,36 35,45 37,51 C35,57 31,66 28,76 L72,76 C69,66 65,57 63,51 C65,45 69,36 72,26 Z"
-              fill="#A9472D"
-              stroke="rgba(169,71,45,0.35)"
-              stroke-width="2.6"
-            />
-            <polyline
-              points="28,28 36,38 28,46 37,51 28,58 36,68 28,76"
-              fill="none"
-              stroke="rgba(169,71,45,0.35)"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              opacity="0.85"
-            />
-            <polyline
-              points="72,28 64,38 72,46 63,51 72,58 64,68 72,76"
-              fill="none"
-              stroke="rgba(169,71,45,0.35)"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              opacity="0.85"
-            />
-            <ellipse cx="50" cy="26" rx="22" ry="7" fill="#A9472D" stroke="rgba(169,71,45,0.35)" stroke-width="2.6" />
-            <ellipse cx="50" cy="76" rx="22" ry="7" fill="#426348" stroke="rgba(169,71,45,0.35)" stroke-width="2.6" />
-            <path d="M32,17 Q22,13 19,3" fill="none" stroke="#A9472D" stroke-width="3" stroke-linecap="round" />
-            <path d="M68,17 Q78,13 81,3" fill="none" stroke="#A9472D" stroke-width="3" stroke-linecap="round" />
-            <path d="M41,15 Q38,11 36,5" fill="none" stroke="#A9472D" stroke-width="2.6" stroke-linecap="round" />
-            <path d="M59,15 Q62,11 64,5" fill="none" stroke="#A9472D" stroke-width="2.6" stroke-linecap="round" />
-          </svg>
-        </span>
+        <span class="brand-mark" aria-hidden="true"><XoLogo :size="44" /></span>
         <div>
           <strong>Le carnet des voix</strong>
           <span>Bénin · une aventure en fon</span>
         </div>
       </div>
-      <button class="home-link" type="button" aria-label="Accueil" @click="showHome">⌂</button>
     </header>
 
-    <main v-if="activeScreen === 'home'" class="welcome-screen">
+    <main v-if="activeScreen === 'home'" class="welcome-screen xo-home">
       <button
         v-if="canInstall && !installed"
         class="install-banner"
@@ -1405,52 +1871,68 @@ onBeforeUnmount(() => {
           <small>Appuie sur <b>Partager</b> (le carré avec la flèche) en bas de Safari, puis <b>« Sur l'écran d'accueil »</b>.</small>
         </span>
       </div>
-      <section class="welcome-hero">
-        <img :src="homeHeroImage" alt="" aria-hidden="true" class="welcome-hero-image" />
-        <span class="eyebrow">Une aventure à travers le Bénin</span>
-        <h1 class="dominant">Fais entendre ta voix.</h1>
-        <p>
-          Suis Afi, messagère d'une radio fictive, de Cotonou à Porto-Novo puis
-          Abomey. Rencontre des habitants et prépare des messages en fon.
+      <div class="xo-zigzag xo-home-zz" aria-hidden="true"></div>
+
+      <section class="xo-home-hero">
+        <XoLeaf class="xo-leaf-deco xo-leaf-deco--l" />
+        <XoLeaf class="xo-leaf-deco xo-leaf-deco--sm xo-leaf-deco--r" />
+        <span class="xo-home-kicker">Bénin · langue fon</span>
+        <XoCube class="xo-home-cube" />
+        <h1 class="xo-home-title">Fais entendre <span>ta voix</span></h1>
+        <p class="xo-home-lead">
+          Parle, écoute et écris le fon. Chaque phrase que tu donnes aide les ordinateurs à comprendre ta langue.
         </p>
-        <div class="welcome-radio" aria-hidden="true">
-          <span class="welcome-radio-sun"></span>
-          <span class="welcome-radio-sign">FON FM</span>
-          <span class="welcome-radio-caption">UN SIGNAL · TOUT UN QUARTIER</span>
-          <span class="welcome-radio-bars">
-            <span>▂</span><span>▅</span><span>▇</span><span>▄</span><span>▆</span><span>▃</span>
+        <button class="xo-home-play" type="button" @click="startChapter">
+          <span class="xo-home-play-mic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
           </span>
-        </div>
+          <span class="xo-home-play-label">Jouer</span>
+          <span class="xo-home-play-hint">C'est gratuit · 2 minutes</span>
+        </button>
+        <button class="xo-home-link" type="button" @click="explainHowItWorks">Comment ça marche ?</button>
       </section>
-      <div class="welcome-heading">
-        <span class="eyebrow">À toi de choisir</span>
-        <h2>Choisis ton parcours</h2>
-      </div>
-      <button class="welcome-action welcome-action-primary" type="button" @click="startChapter">
-        <span class="welcome-action-icon" aria-hidden="true">♫</span>
-        <span class="welcome-action-copy">
-          <strong>Explorer Le carnet des voix</strong>
-          <small>Joue le chapitre pilote et prépare des phrases pour une radio fictive.</small>
-          <b>Lancer l'aventure <span aria-hidden="true">→</span></b>
+
+      <!-- TODO données : compteurs (voix, phrases, Gardiens) à ajouter quand les vraies valeurs existent -->
+      <section id="xo-how" class="xo-home-how" aria-labelledby="xo-how-title">
+        <h2 id="xo-how-title" class="xo-home-h2">3 gestes, c'est tout</h2>
+        <ol class="xo-home-steps">
+          <li v-xo-tilt class="xo-home-step" style="--tilt: -2.5deg">
+            <span class="xo-home-step-n" aria-hidden="true">1</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
+            <h3>Choisis</h3>
+            <p>Un domaine qui te parle : marché, santé, famille…</p>
+          </li>
+          <li v-xo-tilt class="xo-home-step xo-home-step--yellow" style="--tilt: 2deg">
+            <span class="xo-home-step-n" aria-hidden="true">2</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+            <h3>Parle</h3>
+            <p>Lis la phrase, appuie sur le micro et dis-la en fon.</p>
+          </li>
+          <li v-xo-tilt class="xo-home-step xo-home-step--leaf" style="--tilt: -1.5deg">
+            <span class="xo-home-step-n" aria-hidden="true">3</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" /></svg>
+            <h3>Gagne</h3>
+            <p>Des points à chaque voix, puis un niveau de plus.</p>
+          </li>
+        </ol>
+      </section>
+
+      <div class="xo-zigzag xo-zigzag--thin xo-zigzag--leaf xo-home-zz" aria-hidden="true"></div>
+
+      <button class="xo-home-assistant" type="button" @click="enterApp('assistant')">
+        <span class="xo-home-assistant-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z" /></svg>
         </span>
-      </button>
-      <button class="welcome-action" type="button" @click="scrollToContribution">
-        <span class="welcome-action-icon" aria-hidden="true">◉</span>
-        <span class="welcome-action-copy">
-          <strong>Faire entendre ma voix</strong>
-          <small>Traduis une réplique de mission ou propose librement ta propre phrase.</small>
-          <b>Participer <span aria-hidden="true">→</span></b>
+        <span>
+          <strong>Une question sur le jeu ?</strong>
+          <small>Demande à ton guide.</small>
         </span>
+        <span aria-hidden="true">→</span>
       </button>
-      <button class="welcome-action" type="button" @click="activeScreen = 'assistant'">
-        <span class="welcome-action-icon" aria-hidden="true">◈</span>
-        <span class="welcome-action-copy">
-          <strong>Parler avec l'assistant</strong>
-          <small>Pose une question à voix haute et écoute la réponse en fon.</small>
-          <b>Ouvrir l'assistant <span aria-hidden="true">→</span></b>
-        </span>
-      </button>
-      <p class="welcome-note">Un enregistrement de ta voix est nécessaire pour qu'une contribution soit utile à l'entraînement d'une voix fon.</p>
+
+      <p class="xo-home-note">
+        Tes enregistrements restent à vérifier par des locuteurs avant tout usage. Tu peux les retirer à tout moment.
+      </p>
     </main>
 
     <main v-else-if="activeScreen === 'game'">
@@ -1464,41 +1946,75 @@ onBeforeUnmount(() => {
       </button>
 
       <template v-if="contributionMode === 'domain'">
-      <section v-if="!selectedDomain" class="chapter-intro">
-        <div class="chapter-title-row">
-          <div>
-            <span class="eyebrow">Ma voix · choisis un domaine</span>
-            <h1 class="dominant">Le carnet des voix</h1>
+      <section v-if="!selectedDomain" class="xo-play">
+        <div class="xo-hud" aria-label="Ta progression">
+          <div class="xo-hud-top">
+            <span class="xo-level"><b>{{ playerLevel.n }}</b> {{ playerLevel.name }}</span>
+            <span class="xo-chip"><XoIcon name="flame" /> {{ streakDays }} jour{{ streakDays > 1 ? "s" : "" }}</span>
+            <span class="xo-chip"><XoIcon name="star" /> {{ game.points }} pts</span>
           </div>
-          <div class="signal-count" :aria-label="`${savedContributions} contributions enregistrées`">
-            <span aria-hidden="true">♫</span>
-            <strong>{{ savedContributions }}</strong>
+          <div class="xo-progress" role="progressbar" aria-label="Progression vers le niveau suivant" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="levelProgress">
+            <span :style="{ width: levelProgress + '%' }"></span>
           </div>
+          <p class="xo-hud-next">
+            {{ playerNext ? `Encore ${playerNext.min - game.points} points pour « ${playerNext.name} »` : "Niveau maximum atteint" }}
+          </p>
         </div>
-        <p class="intro">
-          Chaque domaine propose des mots et des phrases du quotidien à traduire en fon, avec
-          ou sans histoire pour les présenter — ou propose librement ta propre phrase.
-        </p>
-        <div class="domain-grid" role="list" aria-label="Domaines à explorer">
+
+        <article v-if="dailyMission" v-xo-tilt class="xo-daily">
+          <span class="xo-daily-tag">Mission du jour</span>
+          <h2>{{ dailyMission.label }}</h2>
+          <p>Dis une phrase en fon. Environ 2 minutes, +{{ POINTS_VOICE }} points.</p>
+          <button class="button" type="button" @click="selectDomainCard(dailyMission)">Commencer</button>
+        </article>
+
+        <button class="xo-mix" type="button" @click="startRound(null)">
+          <span class="xo-mix-icon"><XoIcon name="play" /></span>
+          <span>
+            <strong>Lancer une partie</strong>
+            <small>{{ ROUND_SIZE }} cartes au hasard, tous domaines mélangés.</small>
+          </span>
+        </button>
+
+        <h2 class="xo-play-h2">Ou choisis un domaine</h2>
+        <div class="xo-domain-grid" role="list" aria-label="Domaines à explorer">
           <button
-            v-for="domain in domains"
+            v-for="(domain, i) in orderedDomains"
             :key="domain.id"
-            class="domain-card"
+            class="xo-dcard"
+            :class="{ 'xo-dcard--leaf': domain.id === 'agriculture' }"
             type="button"
             role="listitem"
+            :style="{ '--tilt': ((i % 2) * 2 - 1) * 1.5 + 'deg' }"
             @click="selectDomainCard(domain)"
           >
-            <img v-if="domain.image" :src="domain.image" :alt="''" aria-hidden="true" class="domain-card-image" />
-            <span v-else class="domain-card-icon" aria-hidden="true">{{ domain.icon }}</span>
-            <span class="domain-card-label">{{ domain.label }}</span>
-            <span class="domain-card-mode">{{ domain.mode === "histoire" ? "Avec une histoire" : "Mots et phrases" }}</span>
+            <span class="xo-dcard-icon"><XoIcon :name="domainIcons[domain.id] ?? 'star'" /></span>
+            <span v-if="preferredDomains.includes(domain.id)" class="xo-foryou">Pour toi</span>
+            <span class="xo-dcard-label">{{ domain.label }}</span>
+            <span class="xo-dcard-mode">{{ domain.mode === "histoire" ? "Avec une histoire" : "Mots et phrases" }}</span>
+            <span class="xo-progress" role="progressbar" :aria-label="`Progression ${domain.label}`" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="domainProgress(domain)">
+              <span :style="{ width: domainProgress(domain) + '%' }"></span>
+            </span>
           </button>
-          <button class="domain-card domain-card-free" type="button" role="listitem" @click="chooseFreeDomain">
-            <span class="domain-card-icon" aria-hidden="true">✍</span>
-            <span class="domain-card-label">Autre / phrase libre</span>
-            <span class="domain-card-mode">Propose ta propre phrase</span>
-          </button>
+          <div
+            v-for="locked in lockedDomains"
+            :key="locked.id"
+            class="xo-dcard xo-dcard--locked"
+            role="listitem"
+            aria-disabled="true"
+          >
+            <span class="xo-dcard-icon"><XoIcon name="lock" /></span>
+            <span class="xo-dcard-label">{{ locked.label }}</span>
+            <span class="xo-dcard-mode">{{ playerLevel.n >= locked.level ? "Bientôt disponible" : `Niveau ${locked.level} requis` }}</span>
+          </div>
         </div>
+        <button class="xo-free" type="button" @click="chooseFreeDomain">
+          <span class="xo-dcard-icon"><XoIcon name="pen" /></span>
+          <span>
+            <strong>Ta propre phrase</strong>
+            <small>Propose une phrase qui n'est dans aucun domaine.</small>
+          </span>
+        </button>
       </section>
 
       <section
@@ -1519,7 +2035,7 @@ onBeforeUnmount(() => {
               </linearGradient>
             </defs>
             <rect width="64" height="64" fill="#F5E8C9" />
-            <path d="M7 64q2-21 25-23 23 2 26 23Z" fill="#426348" />
+            <path d="M7 64q2-21 25-23 23 2 26 23Z" fill="#F5B82E" />
             <path d="m22 42 10 10 10-10" fill="none" stroke="#f8dfae" stroke-width="2" />
             <path d="M25 35h14v12H25z" fill="#573627" />
             <ellipse cx="32" cy="27" rx="18" ry="21" fill="url(#mina-skin)" />
@@ -1560,71 +2076,62 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section v-else-if="!itemFinished" id="mission" class="game-screen" aria-live="polite">
-        <button class="history-toggle" type="button" @click="openDomainSelector">
-          <span aria-hidden="true">←</span> Changer de domaine
-        </button>
-        <div class="mission-card">
-          <div class="mission-heading">
-            <div>
-              <span class="eyebrow">{{ selectedDomain.label }}</span>
-              <h2>Quel mot ou quelle phrase veux-tu traduire ?</h2>
-            </div>
-          </div>
-          <span class="prompt-label">
-            {{ selectedDomain.mode === "histoire" ? "Quelle annonce aimerais-tu proposer en fon ?" : "Choisis un élément à traduire" }}
-          </span>
-          <div class="difficulty-picker" role="group" aria-label="Niveau de difficulté">
-            <button
-              v-for="level in (['facile', 'moyen', 'difficile'] as const)"
-              :key="level"
-              type="button"
-              class="difficulty-chip"
-              :class="{ 'is-selected': difficultyLevel === level }"
-              :aria-pressed="difficultyLevel === level"
-              @click="difficultyLevel = level"
-            >
-              {{ difficultyLabels[level] }}
-            </button>
-          </div>
-          <div v-if="filteredDomainItems.length" class="choices">
-            <button
-              v-for="(item, index) in filteredDomainItems"
-              :key="item.text"
-              class="choice"
-              type="button"
-              :aria-pressed="selectedItem?.text === item.text"
-              :class="{ 'is-selected': selectedItem?.text === item.text }"
-              :disabled="contributionRecording || contributionSaving"
-              @click="chooseDomainItem(selectedDomain, item, index)"
-            >
-              <span class="choice-index">{{ item.kind === "mot" ? "Mot" : item.kind === "paragraphe" ? "Paragraphe" : "Phrase" }}</span>
-              <span class="choice-text">{{ item.text }}</span>
-              <span class="choice-arrow" aria-hidden="true">↗</span>
-            </button>
-          </div>
-          <p v-else class="hint">Aucun élément à ce niveau pour ce domaine.</p>
+      <section v-else-if="roundSummary" class="card result xo-result xo-round-end" aria-live="polite">
+        <div class="xo-result-burst" aria-hidden="true"><XoIcon name="star" /></div>
+        <span class="xo-kicker xo-kicker--dark">Manche terminée</span>
+        <h2>{{ roundVerdictText.title }}</h2>
+        <p class="xo-round-score"><b>{{ roundContributed }}</b> / {{ roundCards.length }} <small>cartes dites</small></p>
+        <p class="xo-points">+{{ roundPoints }} <small>points d'effort</small></p>
+        <p class="story-copy">{{ roundVerdictText.text }}</p>
+        <p class="hint">Les propositions en fon restent à vérifier par des locuteurs.</p>
+        <div class="actions">
+          <button class="button" type="button" @click="startRound(roundDomainId)">Manche suivante</button>
+          <button class="button button-secondary" type="button" @click="openDomainSelector">Autres domaines</button>
         </div>
       </section>
 
-      <section v-else class="card result">
-        <div class="ending-art" aria-hidden="true">
-          <span class="ending-signal signal-one"></span>
-          <span class="ending-signal signal-two"></span>
-          <span class="ending-signal signal-three"></span>
-          <span class="ending-star">♫</span>
-        </div>
-        <span class="eyebrow">Domaine terminé</span>
-        <h2 class="dominant">Merci pour ta contribution.</h2>
-        <p>
-          {{ savedContributions }} contribution{{ savedContributions === 1 ? "" : "s" }}
-          enregistrée{{ savedContributions === 1 ? "" : "s" }} avec consentement, tous domaines
-          confondus. Les propositions en fon restent à vérifier par des locuteurs et ne
-          représentent pas toutes les voix du Bénin.
-        </p>
-        <button class="button" type="button" @click="openDomainSelector">
-          ← Choisir un autre domaine
+      <section v-else-if="!itemFinished" id="mission" class="game-screen" aria-live="polite">
+        <button class="history-toggle" type="button" @click="openDomainSelector">
+          <span aria-hidden="true">←</span> Quitter la manche
         </button>
+        <div v-if="roundLoading" class="xo-round xo-round--loading" role="status">
+          <span class="xo-spinner" aria-hidden="true"></span>
+          <strong>Je prépare tes cartes…</strong>
+        </div>
+        <div v-else-if="roundError" class="xo-round" role="alert">
+          <strong>{{ roundError }}</strong>
+          <button class="button" type="button" @click="startRound(roundDomainId)">Réessayer</button>
+        </div>
+        <div v-else-if="currentCard" class="xo-round">
+          <div class="xo-round-top">
+            <span class="xo-round-count">Carte {{ roundIndex + 1 }} sur {{ roundCards.length }}</span>
+            <span v-if="roundStreak >= 2" class="xo-round-streak"><XoIcon name="flame" /> {{ roundStreak }} d'affilée</span>
+          </div>
+          <ol class="xo-dots" aria-hidden="true">
+            <li
+              v-for="(card, n) in roundCards"
+              :key="card.id"
+              :class="{ 'is-done': n < roundIndex, 'is-now': n === roundIndex }"
+            ></li>
+          </ol>
+          <p v-if="roundStreak >= 1" class="xo-round-cheer">{{ roundCheer }}</p>
+        </div>
+      </section>
+
+      <section v-else class="card result xo-result">
+        <div class="xo-result-burst" aria-hidden="true"><XoIcon name="star" /></div>
+        <span class="xo-kicker xo-kicker--dark">Carte {{ roundIndex + 1 }} sur {{ roundCards.length }}</span>
+        <h2>{{ lastAward ? roundCheer : "Carte passée" }}</h2>
+        <template v-if="lastAward">
+          <p class="xo-points">+{{ lastAward.points }} <small>points d'effort</small></p>
+          <p class="xo-points-note">Points complets après validation par un expert.</p>
+        </template>
+        <p v-else class="story-copy">Aucune contribution n'a été envoyée cette fois.</p>
+        <p class="hint">Les propositions en fon restent à vérifier par des locuteurs.</p>
+        <div class="actions">
+          <button class="button" type="button" @click="nextPhrase">{{ isLastCard ? "Voir mon bilan" : "Carte suivante" }}</button>
+          <button class="button button-secondary" type="button" @click="openDomainSelector">Quitter la manche</button>
+        </div>
       </section>
       </template>
 
@@ -1641,26 +2148,22 @@ onBeforeUnmount(() => {
       <section
         v-if="contributionMode === 'free' || (selectedItem && !itemFinished)"
         id="contribution"
-        class="card task"
+        :key="roundIndex"
+        class="card task xo-record xo-card-in"
+        :class="{ 'is-swipeable': canSwipeSkip }"
+        :style="swipeStyle"
+        @pointerdown="onSwipeDown"
+        @pointermove="onSwipeMove"
+        @pointerup="onSwipeEnd"
+        @pointercancel="onSwipeEnd"
       >
-        <div class="task-questline">
-          <span class="task-badge" aria-hidden="true">✦</span>
-          <div>
-            <span class="eyebrow">{{ contributionMode === 'domain' ? "Quête facultative" : "Contribution libre" }}</span>
-            <h3>{{ contributionMode === 'domain' ? "Prêter sa voix à la radio" : "Partager une traduction et sa prononciation" }}</h3>
-          </div>
-        </div>
-        <p v-if="contributionMode === 'domain'">
-          Propose une formulation en fon dont tu connais l'usage, puis lis exactement ta phrase à
-          voix haute : l'enregistrement est nécessaire pour contribuer.
-        </p>
-        <p v-else>
-          Écris une phrase en français, sa traduction en fon, puis lis-la à voix haute.
-        </p>
-
+        <span class="xo-kicker xo-kicker--dark">{{ contributionMode === "domain" ? "Mission · Dire" : "Phrase libre" }}</span>
         <template v-if="contributionMode === 'domain'">
-          <span class="prompt-label">Phrase proposée</span>
-          <p class="locked-text">{{ contributionFrench }}</p>
+          <p class="xo-context">{{ selectedDomain?.label }}</p>
+          <p class="xo-phrase">{{ contributionFrench }}</p>
+          <p v-if="canSwipeSkip" class="xo-swipe-hint" aria-hidden="true">
+            <span>‹</span> Glisse la carte pour passer cette phrase <span>›</span>
+          </p>
         </template>
         <template v-else>
           <label class="prompt-label" for="contribution-french">Ta phrase en français</label>
@@ -1673,94 +2176,103 @@ onBeforeUnmount(() => {
             :disabled="contributionRecording || contributionSaving"
           ></textarea>
         </template>
+        <p class="xo-instruction">Dis cette phrase en fon, avec tes mots.</p>
 
-        <template v-if="!isAudioOnlyMode">
-          <label class="prompt-label prompt-label-dominant" for="contribution-fon">Ta traduction en fon</label>
-          <div class="fon-keyboard" role="group" aria-label="Caractères spéciaux du fon">
-            <div class="fon-keyboard-row">
-              <button
-                v-for="letter in fonSpecialLetters"
-                :key="'letter-' + letter"
-                type="button"
-                class="fon-key"
-                @mousedown.prevent
-                @click="insertFonChar(letter)"
-              >{{ letter }}</button>
-            </div>
-            <div class="fon-keyboard-row">
-              <div v-for="vowel in fonBaseVowels" :key="'vowel-' + vowel" class="fon-vowel-wrap">
-                <button
-                  type="button"
-                  class="fon-key"
-                  :class="{ 'is-open': openTonePicker === vowel }"
-                  @mousedown.prevent
-                  @click="toggleTonePicker(vowel)"
-                >{{ vowel }}</button>
-                <div v-if="openTonePicker === vowel" class="fon-tone-drawer">
-                  <button type="button" class="fon-key fon-key-tone" @mousedown.prevent @click="insertFonChar(vowel)">{{ vowel }}</button>
-                  <button
-                    v-for="tone in fonToneMap[vowel]"
-                    :key="tone"
-                    type="button"
-                    class="fon-key fon-key-tone"
-                    @mousedown.prevent
-                    @click="insertFonChar(tone)"
-                  >{{ tone }}</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <textarea
-            id="contribution-fon"
-            v-model="contributionFon"
-            rows="3"
-            maxlength="500"
-            placeholder="Écris la phrase telle que tu la prononceras…"
-            :disabled="contributionRecording || contributionSaving"
-            @focus="trackFonInputFocus"
-          ></textarea>
-        </template>
-        <p v-else class="hint">
-          Tu as choisi de contribuer uniquement à l'oral : lis la phrase à voix haute, aucune
-          traduction écrite ne te sera demandée.
-        </p>
-        <div class="record-row">
+        <div class="xo-mic-zone xo-mic-zone--light">
           <button
-            v-if="!isAudioOnlyMode"
-            class="button button-secondary"
-            type="button"
-            :disabled="contributionPlayingAi"
-            @click="playContributionAiVoice"
-          >
-            ▶ Écouter la voix de l'IA
-          </button>
-          <button
-            class="button button-secondary"
+            class="xo-mic"
+            :class="{ 'is-rec': contributionRecording }"
             type="button"
             :disabled="contributionSaving"
+            :aria-label="contributionRecording ? 'Terminer l\'enregistrement' : contributionHumanAudio ? 'Recommencer l\'enregistrement' : 'Enregistrer ma voix'"
             @click="contributionRecording ? finishContributionRecording() : startContributionRecording()"
           >
-            {{ contributionRecording ? "■ Terminer l'enregistrement" : contributionHumanAudio ? "● Refaire mon enregistrement" : "● Enregistrer ma voix (obligatoire)" }}
+            <XoIcon name="mic" />
+          </button>
+          <span class="xo-mic-label">{{ contributionRecording ? "Appuie pour terminer" : contributionHumanAudio ? "Appuie pour recommencer" : "Appuie pour parler" }}</span>
+          <div v-if="contributionRecording" class="xo-wave" aria-hidden="true">
+            <span v-for="n in 12" :key="n"></span>
+          </div>
+        </div>
+        <p class="hint xo-rec-status" role="status">{{ contributionRecordStatus }}</p>
+
+        <div v-if="contributionHumanAudio && contributionAudioUrl" class="xo-review">
+          <audio :src="contributionAudioUrl" controls aria-label="Écouter mon enregistrement"></audio>
+          <button
+            class="button button-secondary"
+            type="button"
+            :disabled="contributionSaving || contributionRecording"
+            @click="startContributionRecording()"
+          >
+            <XoIcon name="redo" /> Recommencer
           </button>
         </div>
-        <span class="hint" role="status">{{ contributionRecordStatus }}</span>
-        <audio
-          v-if="contributionAiAudioUrl"
-          ref="contributionAiAudioEl"
-          :src="contributionAiAudioUrl"
-          controls
-          aria-label="Écouter la voix de l'IA"
-        ></audio>
-        <audio
-          v-if="contributionAudioUrl"
-          :src="contributionAudioUrl"
-          controls
-          aria-label="Écouter mon enregistrement"
-        ></audio>
+
+        <div v-if="contributionHumanAudio && !isAudioOnlyMode && !writeSkipped" class="xo-write">
+          <template v-if="!writeOpen">
+            <p class="xo-write-q">Tu veux aussi l'écrire ? <b>+{{ POINTS_WRITE }} points</b></p>
+            <div class="xo-write-actions">
+              <button class="button" type="button" @click="writeOpen = true"><XoIcon name="pen" /> Écrire</button>
+              <button class="button button-secondary" type="button" @click="writeSkipped = true">Passer</button>
+            </div>
+          </template>
+          <template v-else>
+            <label class="prompt-label prompt-label-dominant" for="contribution-fon">Ta traduction en fon</label>
+            <div class="xo-fon-field">
+              <textarea
+                id="contribution-fon"
+                v-model="contributionFon"
+                class="xo-fon"
+                lang="fon"
+                inputmode="none"
+                rows="3"
+                maxlength="500"
+                placeholder="Touche ici pour ouvrir le clavier fon…"
+                :disabled="contributionRecording || contributionSaving"
+                @focus="openFonKeyboard"
+                @blur="closeFonKeyboard"
+              ></textarea>
+              <div class="xo-listen-row">
+                <button
+                  class="button button-secondary xo-listen"
+                  type="button"
+                  :disabled="!contributionAudioUrl"
+                  :aria-pressed="fonKbListening"
+                  aria-label="Réécouter ton enregistrement"
+                  @pointerdown.prevent
+                  @click="toggleContributionVoice"
+                >
+                  <XoIcon name="play" /> Ma voix
+                </button>
+                <button
+                  class="button button-secondary xo-listen"
+                  type="button"
+                  :disabled="contributionPlayingAi || !contributionFon.trim()"
+                  aria-label="Écouter ce que tu as écrit"
+                  @click="playContributionAiVoice"
+                >
+                  <XoIcon name="ear" /> Écouter l'écrit
+                </button>
+              </div>
+            </div>
+            <audio
+              v-if="contributionAiAudioUrl"
+              ref="contributionAiAudioEl"
+              :src="contributionAiAudioUrl"
+              controls
+              aria-label="Écouter la voix de l'IA"
+            ></audio>
+            <button class="button button-secondary" type="button" @click="writeSkipped = true; writeOpen = false; contributionFon = ''">
+              Passer
+            </button>
+          </template>
+        </div>
+        <p v-else-if="isAudioOnlyMode" class="hint">
+          Tu contribues à l'oral : aucune traduction écrite ne te sera demandée.
+        </p>
+
         <p class="hint">
-          Aucune donnée n'est envoyée à OpenRouter par ce jeu. N'enregistre pas la voix d'une
-          autre personne. Un enregistrement de ta voix est obligatoire pour que cette
-          contribution serve de référence pour entraîner une voix fon.
+          Aucune donnée n'est envoyée à OpenRouter par ce jeu. N'enregistre que ta propre voix.
         </p>
         <div class="actions">
           <button
@@ -1770,36 +2282,24 @@ onBeforeUnmount(() => {
             :disabled="contributionRecording || contributionSaving"
             @click="finishDomainItem(false)"
           >
-            Continuer sans contribuer
+            Passer cette phrase
           </button>
           <button class="button" type="button" :disabled="!canSaveContribution" @click="saveContribution">
             {{
               contributionSaving
-                ? "Enregistrement…"
+                ? "Envoi…"
                 : contributionSaved && contributionMode === "free"
-                  ? "Contribution enregistrée"
-                  : "Enregistrer ma contribution"
+                  ? "Contribution envoyée"
+                  : "Envoyer"
             }}
           </button>
         </div>
       </section>
 
       <template v-if="contributionMode === 'domain'">
-        <p v-if="selectedItem" class="status" :data-state="gameStatusType" role="status" aria-live="polite">
+        <p v-if="selectedItem && !itemFinished" class="status" :data-state="gameStatusType" role="status" aria-live="polite">
           {{ gameStatus }}
         </p>
-        <div v-if="itemFinished" class="mission-reward">
-          <span class="reward-star" aria-hidden="true">✦</span>
-          <div>
-            <strong>Contribution enregistrée pour {{ selectedDomain?.label }}</strong>
-            <span>Merci d'avoir prêté ta voix à ce domaine.</span>
-          </div>
-        </div>
-        <div v-if="itemFinished" class="actions">
-          <button class="button" type="button" @click="openDomainSelector">
-            ← Choisir un autre domaine
-          </button>
-        </div>
       </template>
       <p v-else class="status" :data-state="contributionStatusState" role="status" aria-live="polite">
         {{ contributionStatus }}
@@ -1815,10 +2315,149 @@ onBeforeUnmount(() => {
       </p>
     </main>
 
+    <main v-else-if="activeScreen === 'profile'" class="xo-screen">
+      <button class="xo-back" type="button" @click="showHome"><XoIcon name="back" /> Accueil</button>
+      <h1 class="xo-screen-title">Mon profil</h1>
+
+      <section class="xo-hud" aria-label="Mon niveau">
+        <p class="xo-pseudo"><XoIcon name="user" /> {{ speakerName }}</p>
+        <div class="xo-hud-top">
+          <span class="xo-level"><b>{{ playerLevel.n }}</b> {{ playerLevel.name }}</span>
+          <span class="xo-chip"><XoIcon name="star" /> {{ game.points }} pts</span>
+          <span class="xo-chip"><XoIcon name="flame" /> {{ streakDays }} jour{{ streakDays > 1 ? "s" : "" }}</span>
+        </div>
+        <div class="xo-progress" role="progressbar" aria-label="Progression vers le niveau suivant" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="levelProgress">
+          <span :style="{ width: levelProgress + '%' }"></span>
+        </div>
+        <p class="xo-hud-next">
+          {{ playerNext ? `Encore ${playerNext.min - game.points} points pour « ${playerNext.name} »` : "Niveau maximum atteint" }}
+        </p>
+      </section>
+
+      <section class="card xo-panel">
+        <h2>Apparence</h2>
+        <div class="xo-segment xo-segment--3" role="group" aria-label="Apparence">
+          <button
+            v-for="o in themeOptions"
+            :key="o.v"
+            type="button"
+            :class="{ 'is-on': themePref === o.v }"
+            :aria-pressed="themePref === o.v"
+            @click="setTheme(o.v)"
+          >
+            <XoIcon :name="o.icon" /> {{ o.label }}
+          </button>
+        </div>
+      </section>
+
+      <section class="card xo-panel">
+        <h2>Mon mode</h2>
+        <p class="story-copy">Tu peux changer quand tu veux.</p>
+        <div class="xo-segment" role="group" aria-label="Mode de contribution">
+          <button type="button" :aria-pressed="isAudioOnlyMode" :class="{ 'is-on': isAudioOnlyMode }" @click="setModeChoice('audio_only')">
+            <XoIcon name="mic" /> Voix seule
+          </button>
+          <button type="button" :aria-pressed="!isAudioOnlyMode" :class="{ 'is-on': !isAudioOnlyMode }" @click="setModeChoice('audio_text')">
+            <XoIcon name="pen" /> Voix + écrit
+          </button>
+        </div>
+        <button class="button button-secondary" type="button" @click="retakeWritingTest"><XoIcon name="redo" /> Refaire le test d'écriture</button>
+      </section>
+
+      <section class="card xo-panel">
+        <h2>Mes accords</h2>
+        <ul class="xo-consent-list">
+          <li><XoIcon name="check" /> J'ai 18 ans ou plus <em>Obligatoire</em></li>
+          <li><XoIcon name="check" /> Ma voix et mes textes servent à entraîner des modèles <em>Obligatoire</em></li>
+          <li>
+            <label>
+              <input type="checkbox" :checked="consentView.profile" @change="setOptionalConsent('profile', ($event.target as HTMLInputElement).checked)" />
+              Mon profil (âge, région, variante) <em>Facultatif</em>
+            </label>
+          </li>
+          <li>
+            <label>
+              <input type="checkbox" :checked="consentView.publication" @change="setOptionalConsent('publication', ($event.target as HTMLInputElement).checked)" />
+              Publication dans un jeu de données ouvert <em>Facultatif</em>
+            </label>
+          </li>
+        </ul>
+        <template v-if="!confirmWithdraw">
+          <button class="button button-secondary xo-danger" type="button" @click="confirmWithdraw = true">Retirer mon accord</button>
+        </template>
+        <div v-else class="xo-confirm" role="alertdialog" aria-label="Confirmer le retrait de l'accord">
+          <p>Tu devras redonner ton accord pour rejouer. Tu es sûr·e ?</p>
+          <div class="xo-write-actions">
+            <button class="button xo-danger-fill" type="button" @click="doWithdrawConsent">Oui, retirer</button>
+            <button class="button button-secondary" type="button" @click="confirmWithdraw = false">Annuler</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card xo-panel">
+        <h2>Mes enregistrements</h2>
+        <p class="story-copy">
+          Pour supprimer les enregistrements déjà envoyés au serveur, écris au responsable du projet.
+          <!-- TODO serveur : route de suppression par speaker_id -->
+        </p>
+        <template v-if="!confirmErase">
+          <button class="button button-secondary xo-danger" type="button" @click="confirmErase = true">Effacer mes données sur cet appareil</button>
+        </template>
+        <div v-else class="xo-confirm" role="alertdialog" aria-label="Confirmer l'effacement">
+          <p>Points, historique et réglages seront effacés d'ici. Les enregistrements déjà envoyés restent sur le serveur.</p>
+          <div class="xo-write-actions">
+            <button class="button xo-danger-fill" type="button" @click="doEraseLocalData">Oui, effacer</button>
+            <button class="button button-secondary" type="button" @click="confirmErase = false">Annuler</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <main v-else-if="activeScreen === 'contributions'" class="xo-screen">
+      <button class="xo-back" type="button" @click="showHome"><XoIcon name="back" /> Accueil</button>
+      <h1 class="xo-screen-title">Mes contributions</h1>
+      <p class="xo-screen-sub">
+        {{ myContributions.length }} envoyée{{ myContributions.length === 1 ? "" : "s" }} depuis cet appareil.
+      </p>
+
+      <ul v-if="myContributions.length" class="xo-contribs">
+        <li v-for="c in myContributions" :key="c.id" class="xo-contrib">
+          <div>
+            <strong>{{ c.text }}</strong>
+            <small>{{ c.domain }} · {{ formatContribDate(c.at) }}</small>
+          </div>
+          <span class="xo-status" data-status="recu">Reçu</span>
+        </li>
+      </ul>
+      <section v-else class="card xo-panel xo-empty">
+        <XoIcon name="mic" />
+        <h2>Rien encore</h2>
+        <p class="story-copy">Ta première voix apparaîtra ici.</p>
+        <button class="button" type="button" @click="enterApp('game')">Jouer</button>
+      </section>
+
+      <details class="xo-legend-box">
+        <summary>
+          <span>Que veulent dire les statuts ?</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        </summary>
+        <ul class="xo-legend">
+          <li v-for="st in statusLegend" :key="st.key">
+            <span class="xo-status" :data-status="st.key">{{ st.label }}</span>
+            <small>{{ st.help }}</small>
+          </li>
+        </ul>
+        <p class="hint">Pour l'instant, tout s'affiche « Reçu » : le suivi des relectures arrive bientôt.</p>
+      </details>
+    </main>
+
     <main v-else-if="activeScreen === 'assistant'" class="assistant-screen">
+      <button class="xo-back" type="button" @click="showHome">
+        <XoIcon name="back" /> Accueil
+      </button>
       <section class="card assistant-card">
         <div class="assistant-head">
-          <span class="eyebrow">Prototype vocal</span>
+          <span class="xo-kicker">Ton guide de jeu</span>
           <h1 class="dominant">Parle, j'écoute.</h1>
           <label class="assistant-language">
             <span>Langue parlée</span>
@@ -1877,19 +2516,22 @@ onBeforeUnmount(() => {
             </svg>
           </div>
         </div>
-        <button
-          class="mic-button"
-          type="button"
-          :data-state="assistantRecording ? 'listening' : 'idle'"
-          :disabled="assistantMicDisabled"
-          @click="assistantRecording ? stopAssistantRecording() : startAssistantRecording()"
-        >
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor"/>
-            <path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          <span>{{ assistantMicLabel }}</span>
-        </button>
+        <div class="xo-mic-zone">
+          <button
+            class="mic-button"
+            type="button"
+            :data-state="assistantRecording ? 'listening' : 'idle'"
+            :disabled="assistantMicDisabled"
+            :aria-label="assistantMicLabel"
+            @click="assistantRecording ? stopAssistantRecording() : startAssistantRecording()"
+          >
+            <XoIcon name="mic" />
+          </button>
+          <span class="xo-mic-label">{{ assistantMicLabel }}</span>
+          <div v-if="assistantRecording" class="xo-wave" aria-hidden="true">
+            <span v-for="n in 12" :key="n"></span>
+          </div>
+        </div>
         <div
           class="progress-track"
           :data-mode="assistantProgressMode"
@@ -1911,29 +2553,35 @@ onBeforeUnmount(() => {
         </button>
       </section>
       <section class="card assistant-transcript">
-        <label class="consent assistant-record-consent">
-          <input v-model="assistantRecordConsent" type="checkbox" />
-          <span>
-            Enregistrer mes questions (audio) pour améliorer la reconnaissance vocale. La réponse
-            générée par l'IA n'est jamais utilisée comme voix humaine de référence.
-          </span>
-        </label>
-        <h2>Ta parole</h2>
-        <p class="hint">Corrige la transcription si nécessaire.</p>
-        <label class="prompt-label" for="assistant-transcript">Transcription reconnue</label>
-        <textarea
-          id="assistant-transcript"
-          v-model="assistantTranscript"
-          rows="3"
-          placeholder="Ta phrase apparaîtra ici après la reconnaissance."
-        ></textarea>
-        <label class="prompt-label prompt-label-dominant" for="assistant-answer">Réponse de l'assistant en fon</label>
-        <textarea
-          id="assistant-answer"
-          v-model="assistantAnswer"
-          rows="4"
-          placeholder="La réponse en fon apparaîtra ici. Tu peux la corriger."
-        ></textarea>
+        <h2 class="xo-chat-title">La conversation</h2>
+        <div class="xo-chat xo-chat--me">
+          <label class="xo-chat-who" for="assistant-transcript"><XoIcon name="user" /> Toi · corrige si besoin</label>
+          <textarea
+            id="assistant-transcript"
+            v-model="assistantTranscript"
+            :class="{ 'xo-fon': assistantLanguage === 'Fon' }"
+            :lang="assistantLanguage === 'Fon' ? 'fon' : 'fr'"
+            :inputmode="assistantLanguage === 'Fon' ? 'none' : 'text'"
+            rows="3"
+            placeholder="Ta phrase apparaîtra ici après la reconnaissance."
+            @focus="assistantLanguage === 'Fon' && openFonKeyboard($event)"
+            @blur="closeFonKeyboard"
+          ></textarea>
+        </div>
+        <div class="xo-chat xo-chat--guide">
+          <label class="xo-chat-who" for="assistant-answer"><XoIcon name="chat" /> Le guide · réponse en fon</label>
+          <textarea
+            id="assistant-answer"
+            v-model="assistantAnswer"
+            class="xo-fon"
+            lang="fon"
+            inputmode="none"
+            rows="4"
+            placeholder="La réponse en fon apparaîtra ici. Tu peux la corriger."
+            @focus="openFonKeyboard"
+            @blur="closeFonKeyboard"
+          ></textarea>
+        </div>
         <audio
           v-if="assistantResponseAudioUrl"
           ref="assistantAudioEl"
@@ -1954,35 +2602,122 @@ onBeforeUnmount(() => {
       </section>
     </main>
 
-    <nav class="phone-nav" aria-label="Navigation du jeu">
-      <button
-        class="phone-nav-item phone-nav-item-dominant"
-        :class="{ 'is-active': activeScreen === 'game' }"
-        type="button"
-        @click="scrollToContribution"
-      >
-        <span aria-hidden="true">◉</span>
-        <span>Ma voix</span>
-      </button>
+    <nav v-show="!fonKbTarget" class="phone-nav xo-nav" aria-label="Navigation du jeu">
       <button
         class="phone-nav-item"
         :class="{ 'is-active': activeScreen === 'home' }"
+        :aria-current="activeScreen === 'home' ? 'page' : undefined"
         type="button"
         @click="showHome"
       >
-        <span aria-hidden="true">⌂</span>
+        <XoIcon name="home" />
         <span>Accueil</span>
+      </button>
+      <button
+        class="phone-nav-item phone-nav-item-dominant"
+        :class="{ 'is-active': activeScreen === 'game' }"
+        :aria-current="activeScreen === 'game' ? 'page' : undefined"
+        type="button"
+        @click="scrollToContribution"
+      >
+        <XoIcon name="mic" />
+        <span>Jouer</span>
       </button>
       <button
         class="phone-nav-item"
         :class="{ 'is-active': activeScreen === 'assistant' }"
+        :aria-current="activeScreen === 'assistant' ? 'page' : undefined"
         type="button"
-        @click="activeScreen = 'assistant'"
+        @click="enterApp('assistant')"
       >
-        <span aria-hidden="true">◈</span>
-        <span>Assistant</span>
+        <XoIcon name="chat" />
+        <span>Guide</span>
+      </button>
+      <button
+        class="phone-nav-item"
+        type="button"
+        aria-haspopup="dialog"
+        :aria-expanded="menuOpen"
+        aria-controls="xo-drawer"
+        @click="openMenu"
+      >
+        <XoIcon name="menu" />
+        <span>Menu</span>
       </button>
     </nav>
+
+    <!-- Menu : accès à toutes les pages depuis n'importe quel écran -->
+    <div v-if="menuOpen" class="xo-drawer-scrim" @click.self="closeMenu">
+      <div id="xo-drawer" class="xo-drawer" role="dialog" aria-modal="true" aria-label="Menu">
+        <div class="xo-zigzag xo-zigzag--thin" aria-hidden="true"></div>
+        <div class="xo-drawer-head">
+          <span class="xo-drawer-title">Menu</span>
+          <button class="xo-drawer-close" type="button" aria-label="Fermer le menu" @click="closeMenu">
+            <XoIcon name="close" />
+          </button>
+        </div>
+        <nav class="xo-drawer-list" aria-label="Pages">
+          <button class="xo-drawer-item" type="button" :class="{ 'is-active': activeScreen === 'home' }" @click="menuGo('home')">
+            <XoIcon name="home" /><span>Accueil</span>
+          </button>
+          <button class="xo-drawer-item" type="button" :class="{ 'is-active': activeScreen === 'game' }" @click="menuGo('game')">
+            <XoIcon name="mic" /><span>Jouer · choisir un domaine</span>
+          </button>
+          <button class="xo-drawer-item" type="button" :class="{ 'is-active': activeScreen === 'assistant' }" @click="menuGo('assistant')">
+            <XoIcon name="chat" /><span>Parler au guide</span>
+          </button>
+          <button class="xo-drawer-item" type="button" @click="menuGo('how')">
+            <XoIcon name="help" /><span>Comment ça marche ?</span>
+          </button>
+          <button class="xo-drawer-item" type="button" :class="{ 'is-active': activeScreen === 'profile' }" @click="menuGo('profile')">
+            <XoIcon name="user" /><span>Mon profil</span>
+          </button>
+          <button class="xo-drawer-item" type="button" :class="{ 'is-active': activeScreen === 'contributions' }" @click="menuGo('contributions')">
+            <XoIcon name="list" /><span>Mes contributions</span>
+          </button>
+          <button v-if="canInstall && !installed" class="xo-drawer-item" type="button" @click="menuGo('install')">
+            <XoIcon name="download" /><span>Installer l'application</span>
+          </button>
+        </nav>
+        <div class="xo-theme">
+          <span class="xo-theme-label">Apparence</span>
+          <div class="xo-segment xo-segment--3" role="group" aria-label="Apparence">
+          <button
+            v-for="o in themeOptions"
+            :key="o.v"
+            type="button"
+            :class="{ 'is-on': themePref === o.v }"
+            :aria-pressed="themePref === o.v"
+            @click="setTheme(o.v)"
+          >
+            <XoIcon :name="o.icon" /> {{ o.label }}
+          </button>
+        </div>
+        </div>
+        <p class="xo-drawer-note">Tes enregistrements restent à vérifier par des locuteurs avant tout usage.</p>
+      </div>
+    </div>
+
+    <div v-if="levelUp" class="xo-levelup-scrim" role="dialog" aria-modal="true" aria-label="Nouveau niveau" @click.self="dismissLevelUp">
+      <div class="xo-levelup">
+        <div class="xo-zigzag" aria-hidden="true"></div>
+        <p class="xo-levelup-kicker">Nouveau niveau</p>
+        <XoCube />
+        <span class="xo-level xo-level--xl"><b>{{ levelUp.n }}</b> {{ levelUp.name }}</span>
+        <div class="xo-zigzag" aria-hidden="true"></div>
+        <button class="button" type="button" @click="dismissLevelUp">Continuer</button>
+      </div>
+    </div>
     </template>
+
+    <!-- Clavier fon : remplace le clavier du téléphone quand un champ fon a le focus. -->
+    <FonKeyboard
+      v-if="fonKbTarget"
+      docked
+      :can-listen="!!fonKbListenUrl"
+      :listening="fonKbListening"
+      @key="onFonKey"
+      @listen="toggleFonKbListen"
+    />
   </div>
 </template>

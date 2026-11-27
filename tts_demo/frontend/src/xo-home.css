@@ -1,0 +1,339 @@
+/*
+  Page d'accueil « Xó » : première page de l'application.
+  Mobile d'abord (360 px), cibles tactiles >= 48 px, palette du prompt uniquement.
+*/
+
+.xo-home {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 22px;
+  margin: 0 -18px;
+  padding: 0 18px 28px;
+  overflow-y: auto;
+  color: #F6ECD6;
+  font-family: "Noto Sans", system-ui, sans-serif;
+}
+.xo-home .xo-home-zz {
+  width: calc(100% + 36px);
+  margin: 0 -18px;
+  flex: none;
+}
+
+/* ---------- Héros ---------- */
+.xo-home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: 6px;
+}
+.xo-home-kicker {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #232A63;
+  border: 2px solid #3A4290;
+  color: #F5B82E;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.xo-home-cube {
+  --s: 104px;
+  margin: 22px auto 30px;
+}
+.xo-home-title {
+  margin: 0;
+  color: #F6ECD6;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: clamp(34px, 10.5vw, 46px);
+  font-weight: 400;
+  line-height: 1.04;
+  text-transform: uppercase;
+  text-shadow: 0 6px 0 #0B0D22;
+}
+.xo-home-title span {
+  display: inline-block;
+  color: #F5B82E;
+}
+.xo-home-lead {
+  max-width: 330px;
+  margin: 16px 0 0;
+  color: #D9D3E8;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+/* Gros bouton JOUER : l'action unique de la page. */
+.xo-home-play {
+  position: relative;
+  display: grid;
+  width: 100%;
+  max-width: 340px;
+  margin-top: 26px;
+  padding: 14px 24px 12px;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 14px;
+  align-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #F5B82E;
+  color: #161A3D;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 7px 0 #0B0D22;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.xo-home-play:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 9px 0 #0B0D22;
+}
+.xo-home-play:active {
+  transform: translateY(7px);
+  box-shadow: 0 0 0 #0B0D22;
+}
+.xo-home-play-mic {
+  position: relative;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  grid-row: 1 / 3;
+  place-items: center;
+  border-radius: 50%;
+  background: #E0592A;
+  color: #161A3D;
+}
+.xo-home-play-mic svg {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+}
+.xo-home-play-mic::before,
+.xo-home-play-mic::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid #E0592A;
+  opacity: 0;
+  animation: xo-pulse 2s ease-out infinite;
+}
+.xo-home-play-mic::after {
+  border-color: #161A3D;
+  animation-delay: 1s;
+}
+.xo-home-play-label {
+  align-self: end;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 30px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.xo-home-play-hint {
+  align-self: start;
+  font-size: 13px;
+  font-weight: 700;
+}
+.xo-home-link {
+  min-height: 48px;
+  margin-top: 8px;
+  padding: 0 18px;
+  border: 0;
+  background: transparent;
+  color: #F6ECD6;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+/* ---------- Compteurs ---------- */
+.xo-home-stats {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  list-style: none;
+}
+.xo-home-stats li {
+  display: grid;
+  padding: 12px 6px;
+  place-items: center;
+  border: 2px solid #3A4290;
+  border-radius: 18px;
+  background: #232A63;
+}
+.xo-home-stats b {
+  color: #F5B82E;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1.1;
+}
+.xo-home-stats span {
+  color: #D9D3E8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---------- Comment ça marche ---------- */
+.xo-home-how {
+  scroll-margin-top: 12px;
+}
+.xo-home-h2 {
+  margin: 0 0 18px;
+  color: #F6ECD6;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 22px;
+  font-weight: 400;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: none;
+}
+.xo-home-steps {
+  display: grid;
+  margin: 0;
+  padding: 0 4px;
+  gap: 18px;
+  list-style: none;
+}
+.xo-home-step {
+  --tilt: 0deg;
+  --rx: 0deg;
+  --ry: 0deg;
+  position: relative;
+  display: grid;
+  padding: 16px 16px 16px 76px;
+  gap: 2px;
+  border-radius: 24px;
+  background: #F6ECD6;
+  color: #161A3D;
+  box-shadow: 0 6px 0 #0B0D22;
+  transform: perspective(900px) rotate(var(--tilt)) rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform 0.25s ease-out;
+}
+.xo-home-step.is-tilting {
+  transition: none;
+}
+.xo-home-step--yellow {
+  background: #F5B82E;
+}
+.xo-home-step svg {
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  border-radius: 50%;
+  background: #161A3D;
+  color: #F5B82E;
+}
+.xo-home-step-n {
+  position: absolute;
+  top: -12px;
+  left: -8px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 3px solid #161A3D;
+  border-radius: 50%;
+  background: #E0592A;
+  color: #161A3D;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 15px;
+}
+.xo-home-step h3 {
+  margin: 0;
+  color: #161A3D;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 19px;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+.xo-home-step p {
+  margin: 0;
+  color: #4A4E78;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.xo-home-step--yellow p {
+  color: #161A3D;
+}
+
+/* ---------- Assistant (entrée discrète) ---------- */
+.xo-home-assistant {
+  display: grid;
+  min-height: 64px;
+  padding: 10px 18px;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  border: 2px solid #F6ECD6;
+  border-radius: 999px;
+  background: transparent;
+  color: #F6ECD6;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.xo-home-assistant:hover {
+  background: rgba(246, 236, 214, 0.1);
+}
+.xo-home-assistant strong {
+  display: block;
+  font-size: 15px;
+}
+.xo-home-assistant small {
+  color: #D9D3E8;
+  font-size: 13px;
+}
+.xo-home-assistant-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: #F5B82E;
+  color: #161A3D;
+}
+.xo-home-assistant-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.xo-home-note {
+  margin: 0;
+  color: #B9B6D3;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.xo-home :focus-visible {
+  outline: 3px solid #F6ECD6;
+  outline-offset: 3px;
+}
+.xo-home .xo-home-play:focus-visible {
+  outline-color: #F5B82E;
+  outline-offset: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xo-home-play-mic::before,
+  .xo-home-play-mic::after {
+    animation: none;
+    opacity: 0;
+  }
+  .xo-home-step {
+    transition: none;
+    transform: rotate(var(--tilt));
+  }
+}

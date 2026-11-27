@@ -1,0 +1,610 @@
+/*
+  Phase 4 : page Jouer, enregistrement, fin de mission, passage de niveau.
+  Palette du prompt uniquement ; cibles tactiles >= 48 px.
+*/
+
+/* ---------- Logo ---------- */
+header .brand-mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+header .brand strong {
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ---------- Page Jouer ---------- */
+.xo-play {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 0 18px;
+  color: #F6ECD6;
+}
+.xo-hud {
+  padding: 14px;
+  border: 2px solid #3A4290;
+  border-radius: 24px;
+  background: #232A63;
+  box-shadow: 0 5px 0 #0B0D22;
+}
+.xo-hud-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.xo-chip {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 2px solid #3A4290;
+  border-radius: 999px;
+  background: #161A3D;
+  color: #F6ECD6;
+  font-size: 14px;
+  font-weight: 800;
+}
+.xo-chip .xo-icon {
+  width: 18px;
+  height: 18px;
+  color: #F5B82E;
+}
+.xo-hud .xo-progress {
+  margin-top: 0;
+  border-color: #F6ECD6;
+  background: #161A3D;
+}
+.xo-hud-next {
+  margin: 8px 0 0;
+  color: #D9D3E8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.xo-daily {
+  --rx: 0deg;
+  --ry: 0deg;
+  position: relative;
+  padding: 18px 18px 20px;
+  border-radius: 24px;
+  background: #F5B82E;
+  color: #161A3D;
+  box-shadow: 0 6px 0 #0B0D22;
+  transform: perspective(900px) rotate(-1.2deg) rotateX(var(--rx)) rotateY(var(--ry));
+}
+.xo-daily.xo-tilt {
+  transform: perspective(900px) rotate(-1.2deg) rotateX(var(--rx)) rotateY(var(--ry));
+}
+.xo-daily-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #161A3D;
+  color: #F5B82E;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.xo-daily h2 {
+  margin: 10px 0 4px;
+  color: #161A3D;
+  font-size: 24px;
+  text-shadow: none;
+}
+.xo-daily p {
+  margin: 0 0 14px;
+  color: #161A3D;
+  font-size: 15px;
+  font-weight: 600;
+}
+.xo-daily .button {
+  background: #161A3D;
+  color: #F6ECD6;
+}
+
+.xo-play-h2 {
+  margin: 6px 0 -2px;
+  color: #F6ECD6;
+  font-size: 20px;
+  text-shadow: none;
+}
+.xo-domain-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 16px 14px;
+}
+.xo-dcard {
+  --tilt: 0deg;
+  position: relative;
+  display: flex;
+  min-height: 156px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 14px 16px;
+  border: 0;
+  border-radius: 24px;
+  background: #F6ECD6;
+  color: #161A3D;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 6px 0 #0B0D22;
+  transform: rotate(var(--tilt));
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.xo-dcard:hover {
+  transform: rotate(0deg) translateY(-3px);
+}
+.xo-dcard:active {
+  transform: rotate(0deg) translateY(5px);
+  box-shadow: 0 1px 0 #0B0D22;
+}
+.xo-dcard-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  place-items: center;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: #161A3D;
+  color: #F5B82E;
+}
+.xo-dcard-icon .xo-icon {
+  width: 26px;
+  height: 26px;
+}
+.xo-dcard-label {
+  color: #161A3D;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.xo-dcard-mode {
+  color: #4A4E78;
+  font-size: 12px;
+  font-weight: 700;
+}
+.xo-dcard .xo-progress {
+  width: 100%;
+  margin-top: auto;
+  height: 10px;
+}
+.xo-dcard .xo-foryou {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  margin: 0;
+}
+.xo-dcard--locked {
+  border: 2px dashed #161A3D;
+  background: #B9B6D3;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.xo-dcard--locked:hover,
+.xo-dcard--locked:active {
+  transform: rotate(var(--tilt));
+  box-shadow: none;
+}
+.xo-dcard--locked .xo-dcard-icon {
+  background: transparent;
+  border: 2px solid #161A3D;
+  color: #161A3D;
+}
+.xo-free {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border: 2px dashed #F6ECD6;
+  border-radius: 999px;
+  background: transparent;
+  color: #F6ECD6;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.xo-free .xo-dcard-icon {
+  margin: 0;
+  background: #F5B82E;
+  color: #161A3D;
+}
+.xo-free strong {
+  display: block;
+  font-size: 16px;
+}
+.xo-free small {
+  color: #D9D3E8;
+  font-size: 13px;
+}
+
+/* ---------- Types de mission ---------- */
+.xo-mission-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.xo-mission-types li {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 2px dashed #B9B6D3;
+  border-radius: 999px;
+  color: #4A4E78;
+  font-size: 13px;
+  font-weight: 800;
+}
+.xo-mission-types li.is-on {
+  border: 2px solid #161A3D;
+  background: #F5B82E;
+  color: #161A3D;
+}
+.xo-mission-types .xo-icon {
+  width: 18px;
+  height: 18px;
+}
+.xo-mission-types small {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------- Enregistrement ---------- */
+.xo-record {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+/* Carte de phrase qu'on peut glisser pour passer (le défilement vertical reste libre). */
+.xo-record.is-swipeable {
+  touch-action: pan-y;
+  cursor: grab;
+}
+.xo-record.is-swipeable:active {
+  cursor: grabbing;
+}
+.xo-swipe-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  color: #4A4E78;
+  font-size: 12px;
+  font-weight: 700;
+}
+.xo-swipe-hint span {
+  font-size: 16px;
+  line-height: 1;
+}
+.xo-kicker--dark {
+  align-self: flex-start;
+  background: #161A3D;
+  color: #F5B82E;
+}
+.xo-context {
+  margin: 12px 0 0;
+  color: #9A3412;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.xo-phrase {
+  margin: 4px 0 0;
+  color: #161A3D;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.xo-instruction {
+  margin: 8px 0 0;
+  color: #4A4E78;
+  font-size: 16px;
+  font-weight: 600;
+}
+.xo-mic-zone--light {
+  margin: 12px 0 0;
+  padding: 18px 0 6px;
+}
+.xo-mic-zone--light .xo-mic-label {
+  color: #161A3D;
+}
+.xo-record .xo-mic {
+  margin: 8px;
+}
+.xo-record .xo-mic.is-rec {
+  background: #F5B82E;
+}
+.xo-record .xo-mic.is-rec::before,
+.xo-record .xo-mic.is-rec::after {
+  animation-duration: 1s;
+}
+.xo-record .xo-mic::before {
+  border-color: #161A3D;
+}
+.xo-record .xo-wave span {
+  background: #161A3D;
+}
+.xo-record .xo-rec-status {
+  text-align: center;
+}
+.xo-review {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+.xo-review audio {
+  width: 100%;
+}
+.xo-write {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 2px solid #161A3D;
+  border-radius: 20px;
+  background: #D9D3E8;
+}
+.xo-write-q {
+  margin: 0;
+  color: #161A3D;
+  font-size: 17px;
+  font-weight: 700;
+}
+.xo-write-q b {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #F5B82E;
+}
+.xo-write-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.xo-fon-field {
+  display: grid;
+  gap: 10px;
+}
+.xo-listen-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.xo-record textarea {
+  border: 2px solid #161A3D;
+  border-radius: 16px;
+  background: #F6ECD6;
+  color: #161A3D;
+  font-size: 18px;
+}
+.xo-record .fon-key {
+  min-width: 48px;
+  min-height: 48px;
+  border: 2px solid #161A3D;
+  border-radius: 12px;
+  background: #F5B82E;
+  color: #161A3D;
+  font-family: "Noto Sans", sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  box-shadow: 0 3px 0 #0B0D22;
+}
+.xo-record .fon-key:active,
+.xo-record .fon-key.is-open {
+  transform: translateY(3px);
+  box-shadow: none;
+}
+.xo-record .button .xo-icon,
+.xo-write .button .xo-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------- Fin de mission ---------- */
+.xo-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.xo-result-burst {
+  display: grid;
+  width: 92px;
+  height: 92px;
+  margin: 4px 0 8px;
+  place-items: center;
+  border: 3px solid #0B0D22;
+  border-radius: 50%;
+  background: #F5B82E;
+  color: #161A3D;
+  box-shadow: 0 6px 0 #0B0D22;
+  animation: xo-pop 0.6s ease-out both;
+}
+.xo-result-burst .xo-icon {
+  width: 50px;
+  height: 50px;
+  fill: #161A3D;
+}
+.xo-result h2 {
+  margin: 6px 0 0;
+  font-size: 30px;
+}
+.xo-points {
+  margin: 0;
+  color: #161A3D;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 52px;
+  line-height: 1.1;
+}
+.xo-points small {
+  display: block;
+  font-family: "Noto Sans", sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+}
+.xo-points-note {
+  margin: 0 0 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #D9D3E8;
+  color: #161A3D;
+  font-size: 13px;
+  font-weight: 700;
+}
+.xo-result .actions {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+  margin-top: 10px;
+}
+@keyframes xo-pop {
+  0% { transform: scale(0.4) rotate(-20deg); }
+  70% { transform: scale(1.12) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* ---------- Passage de niveau ---------- */
+.xo-levelup-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  padding: 20px;
+  place-items: center;
+  background: rgba(11, 13, 34, 0.82);
+}
+.xo-levelup {
+  display: flex;
+  width: 100%;
+  max-width: 340px;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 0 0 22px;
+  overflow: hidden;
+  border: 3px solid #F6ECD6;
+  border-radius: 28px;
+  background: #161A3D;
+  color: #F6ECD6;
+  box-shadow: 0 8px 0 #0B0D22;
+  animation: xo-pop 0.5s ease-out both;
+}
+.xo-levelup .xo-zigzag {
+  flex: none;
+}
+.xo-levelup-kicker {
+  margin: 6px 0 0;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 22px;
+  text-transform: uppercase;
+}
+.xo-level--xl {
+  min-height: 52px;
+  padding: 0 22px;
+  font-size: 20px;
+}
+.xo-level--xl b {
+  width: 34px;
+  height: 34px;
+}
+
+@media (max-width: 380px) {
+  .xo-dcard-label {
+    font-size: 15px;
+  }
+  .xo-phrase {
+    font-size: 23px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xo-result-burst,
+  .xo-levelup {
+    animation: none;
+  }
+  .xo-dcard {
+    transition: none;
+  }
+}
+
+/* Correctifs de spécificité sur la carte d enregistrement */
+.card.xo-record .xo-mic-zone {
+  order: 0;
+}
+.card.xo-record .xo-context {
+  margin: 12px 0 0;
+  color: #9A3412;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.card.xo-record .xo-phrase {
+  margin: 4px 0 0;
+  color: #161A3D;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.card.xo-record .xo-instruction {
+  margin: 8px 0 0;
+  color: #4A4E78;
+  font-size: 16px;
+  font-weight: 600;
+}
+.card.xo-record .actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.card.xo-record .xo-rec-status {
+  margin: 4px 0 0;
+  color: #4A4E78;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.card.xo-result .xo-points {
+  margin: 0;
+  color: #161A3D;
+  font-family: "Dela Gothic One", "Noto Sans", sans-serif;
+  font-size: 56px;
+  line-height: 1.1;
+}
+.card.xo-result .xo-points small {
+  display: block;
+  font-family: "Noto Sans", sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+}
+.card.xo-result .xo-points-note {
+  margin: 0 0 6px;
+  color: #161A3D;
+  font-size: 13px;
+  font-weight: 700;
+}

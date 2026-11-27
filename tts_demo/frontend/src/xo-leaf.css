@@ -1,0 +1,120 @@
+/*
+  Extension « feuilles » de la charte Xó (demande de l'équipe, hors prompt d'origine) :
+  deux verts, utilisés pour la réussite, la progression, la nature (feuilles).
+  Contrastes : indigo #161A3D sur --xo-leaf = 8,9:1 ; crème #F6ECD6 sur --xo-leaf-deep = 6,5:1.
+  Règle conservée : sur le vert clair, le texte est TOUJOURS indigo.
+*/
+:root {
+  --xo-leaf: #8CCB6A;
+  --xo-leaf-mid: #2F7D4F;
+  --xo-leaf-deep: #1F5E3B;
+  --xo-leaf-pale: #DDEFD0;
+
+  --color-success: #1F5E3B;
+  --color-success-bg: #DDEFD0;
+}
+
+/* Réussite et progression en vert */
+.xo-progress > span,
+.xo-hud .xo-progress > span {
+  background: var(--xo-leaf);
+}
+.assistant-card .progress-fill,
+.assistant-card .progress-track[data-mode="complete"] .progress-fill {
+  background: var(--xo-leaf);
+}
+.xo-status[data-status="valide"] {
+  border-color: var(--xo-leaf-deep);
+  background: var(--xo-leaf);
+  color: var(--xo-indigo);
+}
+.xo-result-burst {
+  background: var(--xo-leaf);
+}
+
+/* Cube : faces vertes */
+.xo-cube-face:nth-child(3n) {
+  background: var(--xo-leaf);
+}
+
+/* Frise feuille : vert et jaune */
+.xo-zigzag--leaf {
+  background-color: var(--xo-leaf-mid);
+  background-image:
+    linear-gradient(135deg, var(--xo-leaf) 25%, transparent 25%),
+    linear-gradient(225deg, var(--xo-leaf) 25%, transparent 25%),
+    linear-gradient(315deg, var(--xo-leaf) 25%, transparent 25%),
+    linear-gradient(45deg, var(--xo-leaf) 25%, transparent 25%);
+}
+
+/* Accueil : feuilles décoratives autour du cube + 3e carte verte */
+.xo-home-hero {
+  position: relative;
+}
+.xo-leaf-deco {
+  position: absolute;
+  z-index: 0;
+  width: 78px;
+  height: 78px;
+  pointer-events: none;
+}
+.xo-leaf-deco--l {
+  top: 60px;
+  left: -6px;
+  transform: rotate(-24deg);
+}
+.xo-leaf-deco--r {
+  top: 96px;
+  right: -6px;
+  transform: scaleX(-1) rotate(-24deg);
+}
+.xo-leaf-deco--sm {
+  top: 22px;
+  width: 44px;
+  height: 44px;
+}
+.xo-leaf-deco--sm.xo-leaf-deco--r {
+  right: 40px;
+}
+.xo-home-hero > *:not(.xo-leaf-deco) {
+  position: relative;
+  z-index: 1;
+}
+.xo-home-step--leaf {
+  background: var(--xo-leaf);
+}
+.xo-home-step--leaf p {
+  color: var(--xo-indigo);
+}
+.xo-home-step--leaf .xo-home-step-n {
+  background: var(--xo-yellow);
+}
+
+/* Domaine Agriculture : icône verte */
+.xo-dcard--leaf .xo-dcard-icon {
+  background: var(--xo-leaf-deep);
+  color: var(--xo-leaf);
+}
+
+/* Pastille « Pour toi » en vert */
+.xo-foryou {
+  background: var(--xo-leaf);
+}
+
+@media (max-width: 360px) {
+  .xo-leaf-deco {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .xo-leaf-deco {
+    animation: xo-sway 5s ease-in-out infinite alternate;
+  }
+  .xo-leaf-deco--r {
+    animation-delay: -2.5s;
+  }
+}
+@keyframes xo-sway {
+  from { translate: 0 0; }
+  to { translate: 0 -6px; }
+}
