@@ -13,6 +13,7 @@ import "./xo-play.css";
 import "./xo-leaf.css";
 import "./xo-phase5.css";
 import "./xo-modes.css";
+import "./xo-rounds.css";
 import { initTheme } from "./theme";
 import { listenForInstallPrompt } from "./pwaInstall";
 

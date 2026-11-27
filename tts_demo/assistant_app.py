@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
+import game_db
 from app import MODEL_ID, synthesize
 from assistant_asr import (
     ASR_MODEL_ID,
@@ -242,6 +243,18 @@ def persist_training_phrase(
             encoding="utf-8",
         )
         os.replace(staging_dir, phrase_dir / sample_id)
+
+    game_db.record_contribution(
+        sample_id,
+        contribution_source if content_mode != "libre" else None,
+        french_text,
+        fon_text,
+        contribution_mode,
+        speaker_id,
+        speaker_label,
+        metadata["review_status"],
+        bool(human_audio),
+    )
 
     encoded_synthesis = (
         base64.b64encode(synthesized_audio).decode("ascii")
@@ -995,6 +1008,38 @@ with gr.Blocks(title="FFR · Fon, français et voix", head=FONT_HEAD_TAGS) as de
 
 
 web_app = FastAPI()
+
+try:
+    game_db.init_db(DATASET_DIR)
+except Exception:  # noqa: BLE001 - le jeu doit démarrer même sans base
+    LOGGER.exception("Base de données du jeu indisponible")
+
+
+@web_app.get("/game/domains")
+async def game_domains_request():
+    try:
+        return {"domains": await run_in_threadpool(game_db.list_domains)}
+    except Exception as error:
+        LOGGER.exception("Lecture des domaines impossible")
+        raise HTTPException(status_code=503, detail="Contenu du jeu indisponible.") from error
+
+
+@web_app.get("/game/round")
+async def game_round_request(
+    domain: str = "",
+    level: int = 1,
+    size: int = 5,
+    exclude: str = "",
+):
+    exclude_ids = [e for e in exclude.split(",") if e][:300]
+    try:
+        cards = await run_in_threadpool(
+            game_db.draw_round, domain.strip() or None, level, size, exclude_ids
+        )
+    except Exception as error:
+        LOGGER.exception("Tirage de la manche impossible")
+        raise HTTPException(status_code=503, detail="Contenu du jeu indisponible.") from error
+    return {"cards": cards}
 
 
 @web_app.get("/game")

@@ -42,6 +42,7 @@ import {
   type Level,
 } from "./gamification";
 import { vXoTilt } from "./xoTilt";
+import { ROUND_SIZE, cheerFor, fetchDomainInfo, fetchRound, markSeen, roundVerdict, type DomainInfo, type RoundCard } from "./rounds";
 
 interface AudioCapture {
   stream: MediaStream;
@@ -54,6 +55,7 @@ interface AudioCapture {
 }
 
 interface DomainItem {
+  id?: string;
   text: string;
   kind: "mot" | "phrase" | "paragraphe";
 }
@@ -250,21 +252,31 @@ const selectedItem = ref<DomainItem | null>(null);
 const domainStoryAcknowledged = ref(false);
 const itemFinished = ref(false);
 
+// --- Manches : le serveur tire les cartes au hasard, le joueur ne choisit pas. ---
+const roundCards = ref<RoundCard[]>([]);
+const roundIndex = ref(0);
+const roundContributed = ref(0);
+const roundStreak = ref(0);
+const roundPoints = ref(0);
+const roundSummary = ref(false);
+const roundLoading = ref(false);
+const roundError = ref("");
+const roundDomainId = ref<string | null>(null);
+const domainInfo = ref<Record<string, DomainInfo>>({});
+const roundVerdictText = computed(() => roundVerdict(roundContributed.value, roundCards.value.length || ROUND_SIZE));
+const roundCheer = computed(() => cheerFor(roundStreak.value));
+const currentCard = computed(() => roundCards.value[roundIndex.value] ?? null);
+const isLastCard = computed(() => roundIndex.value >= roundCards.value.length - 1);
+
 // --- Difficulty levels: derived from each item's existing kind classification,
 // not a separate scoring system. Kept as a plain ref so switching domains
 // preserves the player's last-picked level for the session. ---
 type Difficulty = "facile" | "moyen" | "difficile";
-const difficultyLevel = ref<Difficulty>("moyen");
-const difficultyLabels: Record<Difficulty, string> = { facile: "Facile", moyen: "Moyen", difficile: "Difficile" };
 const kindToDifficulty: Record<DomainItem["kind"], Difficulty> = {
   mot: "facile",
   phrase: "moyen",
   paragraphe: "difficile",
 };
-const filteredDomainItems = computed(() => {
-  if (!selectedDomain.value) return [];
-  return selectedDomain.value.items.filter((item) => kindToDifficulty[item.kind] === difficultyLevel.value);
-});
 
 interface OnboardingSlide {
   title: string;
@@ -506,7 +518,8 @@ const lockedDomains: { id: string; label: string; icon: "bus" | "book" | "drum" 
 
 function domainProgress(domain: Domain): number {
   const done = game.value.byDomain[domain.id] ?? 0;
-  return Math.min(100, Math.round((done / Math.max(1, domain.items.length)) * 100));
+  const total = domainInfo.value[domain.id]?.total ?? domain.items.length;
+  return Math.min(100, Math.round((done / Math.max(1, total)) * 100));
 }
 
 function dismissLevelUp() {
@@ -918,49 +931,113 @@ watch([selectedItem, contributionMode], () => {
 });
 
 function nextPhrase() {
+  if (isLastCard.value) {
+    endRound();
+    return;
+  }
+  showCard(roundIndex.value + 1);
+  void nextTick(() => document.querySelector(".shell main")?.scrollTo({ top: 0 }));
+}
+
+function localRound(domainId: string | null): RoundCard[] {
+  const pool = domains
+    .filter((d) => !domainId || d.id === domainId)
+    .flatMap((d) =>
+      d.items.map((i) => ({
+        id: `local:${d.id}:${i.text}`,
+        domain_id: d.id,
+        domain_label: d.label,
+        kind: i.kind,
+        difficulty: kindToDifficulty[i.kind],
+        text: i.text,
+      })),
+    );
+  const order = { mot: 0, phrase: 1, paragraphe: 2 } as const;
+  return pool
+    .sort(() => Math.random() - 0.5)
+    .slice(0, ROUND_SIZE)
+    .sort((a, b) => order[a.kind] - order[b.kind]);
+}
+
+function showCard(i: number) {
+  const card = roundCards.value[i];
+  if (!card) return;
+  roundIndex.value = i;
+  if (domains.some((d) => d.id === card.domain_id)) selectedDomainId.value = card.domain_id;
+  selectedItem.value = { id: card.id, text: card.text, kind: card.kind };
   itemFinished.value = false;
-  selectedItem.value = null;
-  contributionFrench.value = "";
+  contributionFrench.value = card.text;
   contributionFon.value = "";
   clearContributionRecording();
   lastAward.value = null;
   setGameStatus("");
-  void nextTick(() => document.querySelector(".shell main")?.scrollTo({ top: 0 }));
+  markSeen(card.id);
+  logEvent("round_card_shown", { domain_id: card.domain_id, index: i });
 }
 
-function selectDomainCard(domain: Domain) {
+async function startRound(domainId: string | null) {
   contributionMode.value = "domain";
-  selectedDomainId.value = domain.id;
+  roundDomainId.value = domainId;
+  roundSummary.value = false;
+  roundError.value = "";
+  roundContributed.value = 0;
+  roundStreak.value = 0;
+  roundPoints.value = 0;
+  roundIndex.value = 0;
+  roundCards.value = [];
   selectedItem.value = null;
   itemFinished.value = false;
-  domainStoryAcknowledged.value = domain.mode !== "histoire";
   contributionFrench.value = "";
   contributionFon.value = "";
   clearContributionRecording();
   setGameStatus("");
-  logEvent("domain_selected", { domain_id: domain.id });
+  const first = domainId ? domains.find((d) => d.id === domainId) : orderedDomains.value[0];
+  selectedDomainId.value = first?.id ?? null;
+  domainStoryAcknowledged.value = !first || !domainId || first.mode !== "histoire";
+  logEvent("round_start", { domain_id: domainId ?? "mix", level: playerLevel.value.n });
+  roundLoading.value = true;
+  try {
+    roundCards.value = await fetchRound(domainId, playerLevel.value.n);
+  } catch {
+    roundCards.value = localRound(domainId);
+  } finally {
+    roundLoading.value = false;
+  }
+  if (!roundCards.value.length) {
+    roundError.value = "Aucune carte disponible pour le moment.";
+    return;
+  }
+  showCard(0);
+}
+
+function endRound() {
+  roundSummary.value = true;
+  selectedItem.value = null;
+  itemFinished.value = false;
+  contributionFrench.value = "";
+  logEvent("round_end", { contributed: roundContributed.value, size: roundCards.value.length });
+  void nextTick(() => document.querySelector(".shell main")?.scrollTo({ top: 0 }));
+}
+
+function selectDomainCard(domain: Domain) {
+  void startRound(domain.id);
 }
 
 function acknowledgeDomainStory() {
   domainStoryAcknowledged.value = true;
 }
 
-function chooseDomainItem(domain: Domain, item: DomainItem, index: number) {
-  selectedItem.value = item;
-  itemFinished.value = false;
-  contributionFrench.value = item.text;
-  contributionFon.value = "";
-  clearContributionRecording();
-  setGameStatus(
-    "Phrase choisie. Tu peux la traduire et l'enregistrer, ou revenir en arrière.",
-  );
-  logEvent("domain_item_chosen", { domain_id: domain.id, item_index: index });
-}
-
 function finishDomainItem(contributed: boolean) {
   const domain = selectedDomain.value;
   if (!domain || !selectedItem.value) return;
   itemFinished.value = true;
+  if (contributed) {
+    roundContributed.value += 1;
+    roundStreak.value += 1;
+    roundPoints.value += lastAward.value?.points ?? 0;
+  } else {
+    roundStreak.value = 0;
+  }
   setGameStatus(
     contributed
       ? `Contribution reçue pour « ${domain.label} » ; elle reste à vérifier.`
@@ -1492,6 +1569,13 @@ async function handleInstallClick() {
 }
 
 onMounted(() => {
+  fetchDomainInfo()
+    .then((list) => {
+      domainInfo.value = Object.fromEntries(list.map((d) => [d.id, d]));
+    })
+    .catch(() => {
+      // sans serveur de contenu : on garde les totaux embarqués
+    });
   window.addEventListener("keydown", onGlobalKeydown);
   logEvent("app_open");
   updateClock();
@@ -1884,7 +1968,15 @@ onBeforeUnmount(() => {
           <button class="button" type="button" @click="selectDomainCard(dailyMission)">Commencer</button>
         </article>
 
-        <h2 class="xo-play-h2">Tes domaines</h2>
+        <button class="xo-mix" type="button" @click="startRound(null)">
+          <span class="xo-mix-icon"><XoIcon name="play" /></span>
+          <span>
+            <strong>Lancer une partie</strong>
+            <small>{{ ROUND_SIZE }} cartes au hasard, tous domaines mélangés.</small>
+          </span>
+        </button>
+
+        <h2 class="xo-play-h2">Ou choisis un domaine</h2>
         <div class="xo-domain-grid" role="list" aria-label="Domaines à explorer">
           <button
             v-for="(domain, i) in orderedDomains"
@@ -1984,64 +2076,52 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
+      <section v-else-if="roundSummary" class="card result xo-result xo-round-end" aria-live="polite">
+        <div class="xo-result-burst" aria-hidden="true"><XoIcon name="star" /></div>
+        <span class="xo-kicker xo-kicker--dark">Manche terminée</span>
+        <h2>{{ roundVerdictText.title }}</h2>
+        <p class="xo-round-score"><b>{{ roundContributed }}</b> / {{ roundCards.length }} <small>cartes dites</small></p>
+        <p class="xo-points">+{{ roundPoints }} <small>points d'effort</small></p>
+        <p class="story-copy">{{ roundVerdictText.text }}</p>
+        <p class="hint">Les propositions en fon restent à vérifier par des locuteurs.</p>
+        <div class="actions">
+          <button class="button" type="button" @click="startRound(roundDomainId)">Manche suivante</button>
+          <button class="button button-secondary" type="button" @click="openDomainSelector">Autres domaines</button>
+        </div>
+      </section>
+
       <section v-else-if="!itemFinished" id="mission" class="game-screen" aria-live="polite">
         <button class="history-toggle" type="button" @click="openDomainSelector">
-          <span aria-hidden="true">←</span> Changer de domaine
+          <span aria-hidden="true">←</span> Quitter la manche
         </button>
-        <div class="mission-card">
-          <div class="mission-heading">
-            <div>
-              <span class="eyebrow">{{ selectedDomain.label }}</span>
-              <h2>Quel mot ou quelle phrase veux-tu traduire ?</h2>
-            </div>
+        <div v-if="roundLoading" class="xo-round xo-round--loading" role="status">
+          <span class="xo-spinner" aria-hidden="true"></span>
+          <strong>Je prépare tes cartes…</strong>
+        </div>
+        <div v-else-if="roundError" class="xo-round" role="alert">
+          <strong>{{ roundError }}</strong>
+          <button class="button" type="button" @click="startRound(roundDomainId)">Réessayer</button>
+        </div>
+        <div v-else-if="currentCard" class="xo-round">
+          <div class="xo-round-top">
+            <span class="xo-round-count">Carte {{ roundIndex + 1 }} sur {{ roundCards.length }}</span>
+            <span v-if="roundStreak >= 2" class="xo-round-streak"><XoIcon name="flame" /> {{ roundStreak }} d'affilée</span>
           </div>
-          <ul class="xo-mission-types" aria-label="Types de mission">
-            <li class="is-on"><XoIcon name="mic" /> Dire</li>
-            <li class="is-on"><XoIcon name="pen" /> Traduire</li>
-            <li><XoIcon name="ear" /> Tons <small>bientôt</small></li>
-            <li><XoIcon name="tick" /> Valider <small>bientôt</small></li>
-            <li><XoIcon name="image" /> Décris l'image <small>bientôt</small></li>
-          </ul>
-          <span class="prompt-label">
-            {{ selectedDomain.mode === "histoire" ? "Quelle annonce aimerais-tu proposer en fon ?" : "Choisis un élément à traduire" }}
-          </span>
-          <div class="difficulty-picker" role="group" aria-label="Niveau de difficulté">
-            <button
-              v-for="level in (['facile', 'moyen', 'difficile'] as const)"
-              :key="level"
-              type="button"
-              class="difficulty-chip"
-              :class="{ 'is-selected': difficultyLevel === level }"
-              :aria-pressed="difficultyLevel === level"
-              @click="difficultyLevel = level"
-            >
-              {{ difficultyLabels[level] }}
-            </button>
-          </div>
-          <div v-if="filteredDomainItems.length" class="choices">
-            <button
-              v-for="(item, index) in filteredDomainItems"
-              :key="item.text"
-              class="choice"
-              type="button"
-              :aria-pressed="selectedItem?.text === item.text"
-              :class="{ 'is-selected': selectedItem?.text === item.text }"
-              :disabled="contributionRecording || contributionSaving"
-              @click="chooseDomainItem(selectedDomain, item, index)"
-            >
-              <span class="choice-index">{{ item.kind === "mot" ? "Mot" : item.kind === "paragraphe" ? "Paragraphe" : "Phrase" }}</span>
-              <span class="choice-text">{{ item.text }}</span>
-              <span class="choice-arrow" aria-hidden="true">↗</span>
-            </button>
-          </div>
-          <p v-else class="hint">Aucun élément à ce niveau pour ce domaine.</p>
+          <ol class="xo-dots" aria-hidden="true">
+            <li
+              v-for="(card, n) in roundCards"
+              :key="card.id"
+              :class="{ 'is-done': n < roundIndex, 'is-now': n === roundIndex }"
+            ></li>
+          </ol>
+          <p v-if="roundStreak >= 1" class="xo-round-cheer">{{ roundCheer }}</p>
         </div>
       </section>
 
       <section v-else class="card result xo-result">
         <div class="xo-result-burst" aria-hidden="true"><XoIcon name="star" /></div>
-        <span class="xo-kicker xo-kicker--dark">Mission terminée</span>
-        <h2>{{ lastAward ? "Bravo !" : "À bientôt" }}</h2>
+        <span class="xo-kicker xo-kicker--dark">Carte {{ roundIndex + 1 }} sur {{ roundCards.length }}</span>
+        <h2>{{ lastAward ? roundCheer : "Carte passée" }}</h2>
         <template v-if="lastAward">
           <p class="xo-points">+{{ lastAward.points }} <small>points d'effort</small></p>
           <p class="xo-points-note">Points complets après validation par un expert.</p>
@@ -2049,8 +2129,8 @@ onBeforeUnmount(() => {
         <p v-else class="story-copy">Aucune contribution n'a été envoyée cette fois.</p>
         <p class="hint">Les propositions en fon restent à vérifier par des locuteurs.</p>
         <div class="actions">
-          <button class="button" type="button" @click="nextPhrase">Une autre phrase</button>
-          <button class="button button-secondary" type="button" @click="openDomainSelector">Autres domaines</button>
+          <button class="button" type="button" @click="nextPhrase">{{ isLastCard ? "Voir mon bilan" : "Carte suivante" }}</button>
+          <button class="button button-secondary" type="button" @click="openDomainSelector">Quitter la manche</button>
         </div>
       </section>
       </template>
@@ -2068,7 +2148,8 @@ onBeforeUnmount(() => {
       <section
         v-if="contributionMode === 'free' || (selectedItem && !itemFinished)"
         id="contribution"
-        class="card task xo-record"
+        :key="roundIndex"
+        class="card task xo-record xo-card-in"
         :class="{ 'is-swipeable': canSwipeSkip }"
         :style="swipeStyle"
         @pointerdown="onSwipeDown"

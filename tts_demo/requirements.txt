@@ -3,3 +3,5 @@ gradio>=6,<7
 transformers>=4.46,<5
 torch>=2.0
 scipy>=1.10
+sqlalchemy>=2,<3
+psycopg[binary]>=3.1
