@@ -1,5 +1,7 @@
 # Répartition des tâches entre deux développeurs
 
+> **Remplacé par `docs/repartition_cahier_des_charges.md`**, qui suit la section 08 du cahier des charges (Dev A : première connexion et profil ; Dev B : missions et enregistrement). Conservé pour mémoire.
+
 Projet : « Le carnet des voix » (FonNLP Xó). Deux branches : `Rabiatou_baic` et `ursus`.
 Proposition : **Dev A = serveur et données**, **Dev B = jeu et interface**. À vous de décider qui prend quoi ; ce qui compte, c'est de ne pas travailler sur les mêmes fichiers en même temps.
 
